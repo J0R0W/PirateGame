@@ -25,6 +25,7 @@ func _ready() -> void:
 	_check_heading_convention()
 	await _check_terrain()
 	_check_code_conventions()
+	_check_everything_loads()
 
 	print("=== %s ===" % ("BESTANDEN" if _failures == 0 else "%d FEHLER" % _failures))
 	get_tree().quit(1 if _failures > 0 else 0)
@@ -338,6 +339,62 @@ func _check_world_generation() -> void:
 	_assert(in_range, "Hoehenfunktion bleibt in 0 bis 1")
 
 
+## Laedt jedes Skript und jede Szene des Projekts.
+##
+## Anlass: Ein Funktionsaufruf in einer const-Deklaration liess compass.gd nicht
+## mehr parsen. Das Spiel lief weiter - nur ohne Kompass. Ein Parse-Fehler
+## erscheint als Zeile in der Godot-Ausgabe, und die geht zwischen Warnungen
+## unter. Hier wird er zu einem roten Test.
+func _check_everything_loads() -> void:
+	var broken_scripts: Array[String] = []
+	for path: String in _gd_files():
+		var script: GDScript = load(path)
+		# load() liefert auch bei einem Parse-Fehler ein Objekt zurueck - es
+		# ist nur nicht kompiliert. can_instantiate() unterscheidet das.
+		if script == null or not script.can_instantiate():
+			broken_scripts.append(path)
+	_assert(broken_scripts.is_empty(),
+		"Alle Skripte kompilieren%s" % _offenders(broken_scripts))
+
+	var broken_scenes: Array[String] = []
+	var scene_count := 0
+	for path: String in _scene_files():
+		scene_count += 1
+		if load(path) == null:
+			broken_scenes.append(path)
+	_assert(broken_scenes.is_empty(),
+		"Alle Szenen laden (%d)%s" % [scene_count, _offenders(broken_scenes)])
+
+	# Eine Szene laedt auch dann, wenn ihr Skript fehlt - dann sind Nodes
+	# stumm. Deshalb wird gegengeprueft, dass die Skripte wirklich dranhaengen.
+	var scripted := {
+		"res://ui/hud/sailing_hud.tscn": ["Compass"],
+		"res://entities/ship/ship.tscn": [],
+		"res://ui/map/world_map.tscn": [],
+	}
+	var missing: Array[String] = []
+	for scene_path: String in scripted:
+		var packed: PackedScene = load(scene_path)
+		if packed == null:
+			continue
+		var root: Node = packed.instantiate()
+		if root.get_script() == null:
+			missing.append(scene_path)
+		for child_name: String in scripted[scene_path]:
+			var child: Node = root.find_child(child_name, true, false)
+			if child == null or child.get_script() == null:
+				missing.append("%s/%s" % [scene_path, child_name])
+		root.queue_free()
+	_assert(missing.is_empty(), "Szenen behalten ihre Skripte%s" % _offenders(missing))
+
+
+func _scene_files() -> PackedStringArray:
+	var found := PackedStringArray()
+	for directory: String in CODE_DIRS:
+		_collect_by_suffix("res://" + directory, ".tscn", found)
+	return found
+
+
 ## Setzt die Projektregeln durch, die durch Fehler gelernt wurden.
 ##
 ## Beide Regeln unten stehen hier, weil ihre Verletzung im Spiel nicht auffaellt:
@@ -383,11 +440,11 @@ func _check_code_conventions() -> void:
 func _gd_files() -> PackedStringArray:
 	var found := PackedStringArray()
 	for directory: String in CODE_DIRS:
-		_collect_gd("res://" + directory, found)
+		_collect_by_suffix("res://" + directory, ".gd", found)
 	return found
 
 
-func _collect_gd(path: String, into: PackedStringArray) -> void:
+func _collect_by_suffix(path: String, suffix: String, into: PackedStringArray) -> void:
 	var dir := DirAccess.open(path)
 	if dir == null:
 		return
@@ -396,8 +453,8 @@ func _collect_gd(path: String, into: PackedStringArray) -> void:
 	while entry != "":
 		var full := path + "/" + entry
 		if dir.current_is_dir():
-			_collect_gd(full, into)
-		elif entry.ends_with(".gd"):
+			_collect_by_suffix(full, suffix, into)
+		elif entry.ends_with(suffix):
 			into.append(full)
 		entry = dir.get_next()
 	dir.list_dir_end()

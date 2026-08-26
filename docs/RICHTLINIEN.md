@@ -195,18 +195,38 @@ nicht auf. Deshalb gibt es zwei Sichtprüfungen, die wirklich rendern:
 | `tests/capture_sailing.tscn` | Segelmodus, vier Aufnahmen, dazu Bildrate und Chunk-Zahl |
 | `tests/capture_ship.tscn` | Schiffsmodell aus vier festen Winkeln, ruhige Wasserlinie |
 
-### C3. Messen statt raten
+### C3. Die Godot-Ausgabe wird gelesen, nicht gefiltert
+
+Ein Parse-Fehler ist eine einzelne Zeile zwischen Warnungen — und das Spiel läuft
+weiter, nur ohne den betroffenen Node.
+
+**Warum:** Genau das ist passiert. Ein Funktionsaufruf in einer `const`-Deklaration ließ
+`compass.gd` nicht mehr parsen. Der Kompass verschwand, alles andere lief. Beim Prüfen
+war die Ausgabe auf `FEHL|===` gefiltert, und die Sichtprüfung fiel auf die Seekarte —
+das eine Bild, in dem der Kompass ohnehin verdeckt ist.
+
+Zwei Konsequenzen: Beim Verifizieren wird die volle Ausgabe angesehen, und nach
+visuellen Änderungen werden *alle* Aufnahmen geprüft, nicht eine.
+
+Weil man sich darauf nicht verlassen kann, prüft der Rauchtest es zusätzlich selbst
+(siehe C5).
+
+### C4. Messen statt raten
 
 Parameter der Weltgenerierung werden über `tests/world_report.tscn` eingestellt, nicht
 durch Probieren. Performance wird beziffert, nicht geschätzt.
 
-### <a id="durchsetzung"></a>C4. Was automatisch geprüft wird
+### <a id="durchsetzung"></a>C5. Was automatisch geprüft wird
 
 `_check_code_conventions()` im Rauchtest durchsucht `autoload/`, `data/`, `world/`,
 `ui/`, `entities/` und `modes/` nach Regelverstößen:
 
 - **A3** — kein `Color(...)` außerhalb von `palette.gd`
 - **B7** — kein `rotation.y` außerhalb von `ship.gd`
+
+Dazu prüft `_check_everything_loads()`, dass jedes Skript kompiliert und jede Szene ihre
+Skripte behält. `load()` liefert bei einem Parse-Fehler trotzdem ein Objekt zurück — es
+ist nur nicht kompiliert; `can_instantiate()` unterscheidet das.
 
 Beide Regeln stehen hier, weil ihre Verletzung im laufenden Spiel *nicht auffällt*: Eine
 falsche Farbe sieht nur etwas anders aus, ein direkt gelesenes `rotation.y` liefert einen

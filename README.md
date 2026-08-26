@@ -25,10 +25,11 @@ godot --path .
 godot --headless --path . res://tests/smoke_test.tscn
 ```
 
-132 Prüfungen: Autoloads, Eingabebelegung, Kampagnenstart, Speicher-Roundtrip,
+137 Prüfungen: Autoloads, Eingabebelegung, Kampagnenstart, Speicher-Roundtrip,
 Segelmathematik, Winkelkonvention, Wellenfeld, Schiffsgeometrie, Weltgenerierung
 (Landanteil, Weltrand, Hafenabstände, Nationsbesitz, Wirtschaft, Determinismus)
-sowie Gelände-Chunks und Grundberührung. Exit-Code 0 = bestanden.
+sowie Gelände-Chunks, Grundberührung, Projektregeln und die Frage, ob überhaupt
+jedes Skript kompiliert. Exit-Code 0 = bestanden.
 
 ```bash
 godot --path . res://tests/capture_sailing.tscn

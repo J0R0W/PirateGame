@@ -7,11 +7,14 @@ extends Control
 
 const RADIUS: float = 62.0
 
-const COL_RING := Palette.fade(Palette.HUD_DIM, 0.55)
-const COL_TICK := Palette.fade(Palette.HUD_DIM, 0.35)
-const COL_TEXT := Palette.fade(Palette.HUD_TEXT, 0.85)
+# static var statt const: Palette.fade() ist ein Funktionsaufruf und damit kein
+# konstanter Ausdruck. Berechnet wird trotzdem nur einmal je Klasse.
+static var COL_RING := Palette.fade(Palette.HUD_DIM, 0.55)
+static var COL_TICK := Palette.fade(Palette.HUD_DIM, 0.35)
+static var COL_TEXT := Palette.fade(Palette.HUD_TEXT, 0.85)
+static var COL_NOGO := Palette.fade(Palette.DANGER, 0.30)
+
 const COL_WIND := Palette.BRASS
-const COL_NOGO := Palette.fade(Palette.DANGER, 0.30)
 const COL_SHIP := Palette.HUD_TEXT
 const COL_NORTH := Palette.DANGER
 
