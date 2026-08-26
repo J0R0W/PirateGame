@@ -1,0 +1,70 @@
+## Rendert den Segelmodus und legt Aufnahmen ab - Sichtpruefung fuer M1.
+##
+## Laufen lassen mit:
+##   godot --path . res://tests/capture_sailing.tscn
+##
+## Braucht ein echtes Fenster: Der Ozean-Shader wird nur beim Rendern
+## kompiliert, headless bleibt er ungeprueft.
+extends Node
+
+const OUT_DIR: String = "user://captures"
+
+var _ship: Ship
+
+
+func _ready() -> void:
+	DirAccess.make_dir_recursive_absolute(OUT_DIR)
+	print("Aufnahmen nach: ", ProjectSettings.globalize_path(OUT_DIR))
+
+	var packed: PackedScene = load("res://modes/sailing/sailing_mode.tscn")
+	var mode: Node = packed.instantiate()
+	add_child(mode)
+	await get_tree().process_frame
+	_ship = mode.get_node("PlayerShip")
+
+	# Wind festnageln, sonst dreht er waehrend der Aufnahme weg.
+	_pin_wind(deg_to_rad(90.0))
+
+	await _wait(4.5)
+	await _shot("01_raumschots")
+
+	Input.action_press("helm_starboard")
+	await _wait(2.5)
+	Input.action_release("helm_starboard")
+	await _wait(0.5)
+	await _shot("02_wende")
+
+	# Direkt in den Wind drehen - das HUD muss warnen.
+	_ship.rotation.y = deg_to_rad(90.0)
+	await _wait(2.0)
+	await _shot("03_in_irons")
+
+	# Seekarte oeffnen.
+	var map: Control = mode.get_node("WorldMap")
+	map.toggle()
+	await _wait(1.0)
+	await _shot("04_seekarte")
+
+	get_tree().quit(0)
+
+
+func _pin_wind(direction: float) -> void:
+	WorldData.set_wind(direction, 1.0)
+
+
+func _wait(seconds: float) -> void:
+	await get_tree().create_timer(seconds).timeout
+
+
+func _shot(shot_name: String) -> void:
+	await RenderingServer.frame_post_draw
+	var image := get_viewport().get_texture().get_image()
+	var path := "%s/%s.png" % [OUT_DIR, shot_name]
+	var error := image.save_png(path)
+	print("  %-16s  kurs %4d°   %5.1f kn   %s   [%s]" % [
+		shot_name,
+		wrapi(int(rad_to_deg(_ship.heading())), 0, 360),
+		_ship.speed,
+		_ship.point_of_sail(),
+		"ok" if error == OK else "FEHLER %d" % error,
+	])

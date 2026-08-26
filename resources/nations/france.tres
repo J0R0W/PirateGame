@@ -1,0 +1,14 @@
+[gd_resource type="Resource" script_class="NationData" load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://data/nation_data.gd" id="1_nation"]
+
+[resource]
+script = ExtResource("1_nation")
+id = 2
+display_name = "Frankreich"
+adjective = "französisch"
+color = Color(0.180, 0.373, 0.639, 1)
+name_prefixes = PackedStringArray("Port", "Saint", "Cap", "Baie", "Petit", "Grand", "Nouvelle", "Anse")
+name_suffixes = PackedStringArray("Pierre", "Marie", "Louis", "Espoir", "Rouge", "Blanc", "Fortune", "Liberté", "Soleil", "Étoile", "Croix", "Tranquille", "Sauvage")
+aggression = 0.5
+reputation_sensitivity = 0.9

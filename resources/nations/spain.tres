@@ -1,0 +1,14 @@
+[gd_resource type="Resource" script_class="NationData" load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://data/nation_data.gd" id="1_nation"]
+
+[resource]
+script = ExtResource("1_nation")
+id = 0
+display_name = "Spanien"
+adjective = "spanisch"
+color = Color(0.831, 0.627, 0.090, 1)
+name_prefixes = PackedStringArray("Puerto", "Villa", "San", "Santa", "Nueva", "Costa", "Punta", "Bahía", "Cabo", "Isla")
+name_suffixes = PackedStringArray("Cruz", "Marta", "Vera", "Blanca", "Negra", "Grande", "Verde", "Dorada", "Real", "Salada", "Rica", "Vieja", "Esperanza", "Sombra", "Fuego", "Aurora")
+aggression = 0.7
+reputation_sensitivity = 1.2

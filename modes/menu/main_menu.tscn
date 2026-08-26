@@ -1,0 +1,89 @@
+[gd_scene load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://modes/menu/main_menu.gd" id="1_menu"]
+
+[node name="MainMenu" type="Control"]
+layout_mode = 3
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+script = ExtResource("1_menu")
+
+[node name="Background" type="ColorRect" parent="."]
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+color = Color(0.0509804, 0.0901961, 0.14902, 1)
+
+[node name="Menu" type="VBoxContainer" parent="."]
+unique_name_in_owner = true
+layout_mode = 1
+anchors_preset = 8
+anchor_left = 0.5
+anchor_top = 0.5
+anchor_right = 0.5
+anchor_bottom = 0.5
+offset_left = -160.0
+offset_top = -130.0
+offset_right = 160.0
+offset_bottom = 130.0
+grow_horizontal = 2
+grow_vertical = 2
+theme_override_constants/separation = 14
+
+[node name="Title" type="Label" parent="Menu"]
+layout_mode = 2
+theme_override_colors/font_color = Color(0.913725, 0.815686, 0.560784, 1)
+theme_override_font_sizes/font_size = 52
+text = "PIRATEGAME"
+horizontal_alignment = 1
+
+[node name="Subtitle" type="Label" parent="Menu"]
+layout_mode = 2
+theme_override_colors/font_color = Color(0.505882, 0.588235, 0.65098, 1)
+theme_override_font_sizes/font_size = 15
+text = "Meilenstein M0 — Fundament"
+horizontal_alignment = 1
+
+[node name="Spacer" type="Control" parent="Menu"]
+custom_minimum_size = Vector2(0, 24)
+layout_mode = 2
+
+[node name="NewGameButton" type="Button" parent="Menu"]
+unique_name_in_owner = true
+custom_minimum_size = Vector2(0, 44)
+layout_mode = 2
+text = "Neue Kampagne"
+
+[node name="ContinueButton" type="Button" parent="Menu"]
+unique_name_in_owner = true
+custom_minimum_size = Vector2(0, 44)
+layout_mode = 2
+text = "Fortsetzen"
+
+[node name="QuitButton" type="Button" parent="Menu"]
+unique_name_in_owner = true
+custom_minimum_size = Vector2(0, 44)
+layout_mode = 2
+text = "Beenden"
+
+[node name="StatusLabel" type="Label" parent="."]
+unique_name_in_owner = true
+layout_mode = 1
+anchors_preset = 12
+anchor_top = 1.0
+anchor_right = 1.0
+anchor_bottom = 1.0
+offset_top = -48.0
+grow_horizontal = 2
+grow_vertical = 0
+theme_override_colors/font_color = Color(0.443137, 0.529412, 0.6, 1)
+theme_override_font_sizes/font_size = 14
+text = "Bereit."
+horizontal_alignment = 1
+vertical_alignment = 1

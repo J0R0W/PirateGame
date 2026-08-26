@@ -1,0 +1,14 @@
+[gd_resource type="Resource" script_class="NationData" load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://data/nation_data.gd" id="1_nation"]
+
+[resource]
+script = ExtResource("1_nation")
+id = 3
+display_name = "Niederlande"
+adjective = "niederländisch"
+color = Color(0.851, 0.467, 0.024, 1)
+name_prefixes = PackedStringArray("Nieuw", "Oranje", "Fort", "Sint", "Willem", "Groot", "Klein")
+name_suffixes = PackedStringArray("Amsterdam", "Zeelandia", "Haven", "Kaap", "Stad", "Baai", "Dijk", "Bergen", "Eustatius", "Rust", "Hoop", "Vrede", "Anker")
+aggression = 0.4
+reputation_sensitivity = 0.8

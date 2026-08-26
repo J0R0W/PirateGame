@@ -1,0 +1,14 @@
+[gd_resource type="Resource" script_class="NationData" load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://data/nation_data.gd" id="1_nation"]
+
+[resource]
+script = ExtResource("1_nation")
+id = 1
+display_name = "England"
+adjective = "englisch"
+color = Color(0.690, 0.227, 0.180, 1)
+name_prefixes = PackedStringArray("Port", "New", "Fort", "Kings", "Queens", "Saint", "Cape", "Old")
+name_suffixes = PackedStringArray("Royal", "Haven", "Harbour", "Point", "Cross", "Landing", "Bay", "Reach", "Hollow", "Ridge", "George", "Charles", "Anne", "Bristol", "Thorn")
+aggression = 0.55
+reputation_sensitivity = 1.0
