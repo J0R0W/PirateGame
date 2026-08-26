@@ -534,6 +534,20 @@ func _check_terrain() -> void:
 	_assert(aabb.position.y >= TerrainChunk.SEABED_FLOOR - 0.1,
 		"Mesh reicht nicht tiefer als der Meeresboden")
 
+	# Gelaendematerial: Rueckseiten-Culling zerlegt steile Kuesten in Fetzen.
+	var manager_script: GDScript = load("res://world/terrain/chunk_manager.gd")
+	var manager: Node3D = manager_script.new()
+	add_child(manager)
+	await get_tree().process_frame
+	var terrain_material: StandardMaterial3D = manager.get("_material")
+	_assert(terrain_material != null, "Gelaendematerial existiert")
+	if terrain_material != null:
+		_assert(terrain_material.cull_mode == BaseMaterial3D.CULL_DISABLED,
+			"Gelaende rendert beide Seiten")
+		_assert(terrain_material.vertex_color_use_as_albedo,
+			"Gelaende nutzt Vertex-Farben")
+	manager.queue_free()
+
 	# Grundberuehrung: Land muss das Schiff aufhalten.
 	var packed: PackedScene = load("res://entities/ship/ship.tscn")
 	var ship: Node3D = packed.instantiate()

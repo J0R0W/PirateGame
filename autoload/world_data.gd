@@ -177,7 +177,7 @@ func chunk_coord_at(position: Vector3) -> Vector2i:
 func terrain_y(x: float, z: float) -> float:
 	if generator == null:
 		return -50.0
-	return (generator.height_at(x, z) - generator.sea_level) * TERRAIN_HEIGHT_SCALE
+	return generator.elevation_at(x, z, TERRAIN_HEIGHT_SCALE)
 
 
 func sea_level() -> float:

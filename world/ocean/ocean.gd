@@ -14,6 +14,10 @@ const SNAP: float = 8.0
 @onready var _material: ShaderMaterial = material_override as ShaderMaterial
 
 
+func _ready() -> void:
+	mesh = OceanMesh.build()
+
+
 func _process(_delta: float) -> void:
 	# Dieselbe Uhr wie OceanWaves.height_at() - sonst passen Bild und Physik
 	# nicht zusammen.

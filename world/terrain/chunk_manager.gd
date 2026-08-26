@@ -32,6 +32,12 @@ func _ready() -> void:
 	_material.vertex_color_use_as_albedo = true
 	_material.roughness = 0.92
 	_material.metallic_specular = 0.15
+	# Beide Seiten rendern. An steilen Kuesten hat das Hoehenfeld ein
+	# Zickzack-Profil: Benachbarte Dreiecke zeigen abwechselnd zur Kamera und
+	# von ihr weg. Mit Rueckseiten-Culling verschwinden die abgewandten, und
+	# man sieht durch die Kueste hindurch - die Insel zerfiel in schwebende
+	# Fetzen und wirkte durchsichtig.
+	_material.cull_mode = BaseMaterial3D.CULL_DISABLED
 
 
 func _process(_delta: float) -> void:

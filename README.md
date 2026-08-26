@@ -25,7 +25,7 @@ godot --path .
 godot --headless --path . res://tests/smoke_test.tscn
 ```
 
-137 Prüfungen: Autoloads, Eingabebelegung, Kampagnenstart, Speicher-Roundtrip,
+140 Prüfungen: Autoloads, Eingabebelegung, Kampagnenstart, Speicher-Roundtrip,
 Segelmathematik, Winkelkonvention, Wellenfeld, Schiffsgeometrie, Weltgenerierung
 (Landanteil, Weltrand, Hafenabstände, Nationsbesitz, Wirtschaft, Determinismus)
 sowie Gelände-Chunks, Grundberührung, Projektregeln und die Frage, ob überhaupt
@@ -53,10 +53,20 @@ erklärte Hauptrisiko von M2.
 
 ```bash
 godot --headless --path . res://tests/world_report.tscn
+godot --headless --path . res://tests/terrain_report.tscn
 ```
 
-Statistik über fünf generierte Welten: Landanteil, Inseln, Hafenplätze,
-Städte je Nation, Beispielwirtschaft. Zum Justieren der Generator-Parameter.
+Statistik über fünf generierte Welten (Landanteil, Inseln, Hafenplätze, Städte
+je Nation, Beispielwirtschaft) und Kennzahlen eines Küstenchunks (Vertexbereich,
+Höhensprünge, Kantenpassung, Chunk-Belegung). Zum Justieren der Parameter.
+
+```bash
+godot --path . res://tests/capture_island.tscn
+```
+
+Zeigt eine Küste vier Mal: vollständig, ohne Dunst, ohne Wasser und als
+Drahtgitter. Damit lässt sich unterscheiden, ob ein Darstellungsfehler vom
+Gelände, vom Wasser oder von der Atmosphäre kommt.
 
 ## Struktur
 
@@ -80,10 +90,12 @@ Verbindlich in [docs/RICHTLINIEN.md](docs/RICHTLINIEN.md). Die wichtigsten:
 - **Alle Farben aus `data/palette.gd`** — kein `Color(...)` im übrigen Code.
 - **Kurse sind Navigationswinkel** — `heading()` statt `rotation.y`.
 - **Vertex-Farben sind linear** — `Palette.for_vertex()` benutzen.
+- **Gelände rendert beidseitig** — mit Rückseiten-Culling zerfallen steile Küsten
+  in schwebende Fetzen.
 - **Die Wellenformel existiert doppelt** — `OceanWaves` und `ocean.gdshader` müssen
   synchron bleiben, sonst schwebt das Schiff über der sichtbaren See.
 
-Die ersten drei prüft der Rauchtest automatisch.
+Alle bis auf die letzte prüft der Rauchtest automatisch.
 
 ## Steuerung
 

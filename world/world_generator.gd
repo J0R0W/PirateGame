@@ -64,7 +64,15 @@ var nations: Array[NationData] = []
 var _cell_island: PackedInt32Array = PackedInt32Array()
 var _cell_size: float = 40.0
 
-## Chunk-Belegung: 1, wenn der Chunk Land beruehrt. Ueber offener See braucht
+## Wie weit unter den Meeresspiegel reicht Gelaende, das gebaut werden muss?
+## In Hoehenwert-Einheiten; mit SEABED_GAIN entspricht 0.04 rund 15 Metern Tiefe.
+##
+## Ohne diese Marge entstanden Meshes nur fuer Chunks mit Land - der
+## Meeresboden davor fehlte. Das Gelaende war eine Schale ohne Unterseite, und
+## an steilen Kuesten sah man seitlich darunter hindurch ins Leere.
+const SUBMERGED_MARGIN: float = 0.04
+
+## Chunk-Belegung: 1, wenn der Chunk sichtbares Gelaende traegt. Ueber offener See braucht
 ## es kein Gelaendemesh - der Ozean-Shader deckt das ab. Bei 14 Prozent
 ## Landanteil spart das rund fuenf Sechstel der Arbeit.
 var chunk_grid_size: int = 0
@@ -125,6 +133,48 @@ func height_at(x: float, z: float) -> float:
 
 func is_land(x: float, z: float) -> bool:
 	return height_at(x, z) > sea_level
+
+
+## Milde Ueberhoehung des Ufers und Breite der Uferzone, normiert auf die
+## Hoehenspanne der Welt.
+##
+## Bei 6 km Noise-Wellenlaenge verlaeuft die Kueste sonst fast waagerecht, und
+## Inseln wirken wie flache Platten. Die Ueberhoehung gibt ihnen Kontur.
+##
+## Bewusst STUECKWEISE LINEAR statt als Potenzkurve: Eine Potenz hat bei t
+## gegen 0 eine unendliche Ableitung, macht also am Meeresspiegel jede Kueste
+## zur senkrechten Wand. Hier ist die Steigung ueberall endlich.
+##
+## Und bewusst MILDE. Ein Wert von 5.0 ergab Klippen rund um jede Insel. Die
+## zerfaserte Silhouette, die urspruenglich zu dieser Kurve fuehrte, kam gar
+## nicht von flachen Kuesten, sondern vom Rueckseiten-Culling im Gelaende-
+## material - siehe chunk_manager.gd.
+const COAST_GAIN: float = 2.5
+const COAST_ZONE: float = 0.06
+
+## Unter Wasser wird nicht aufgesteilt - der Schelf soll flach auslaufen.
+const SEABED_GAIN: float = 1.0
+
+
+## Gelaendehoehe in Metern, relativ zum Meeresspiegel. Negativ unter Wasser.
+##
+## Die einzige Stelle, an der Hoehenwerte zu Metern werden - Gelaendemesh,
+## Kartenanzeige und Spiellogik muessen sich einig sein.
+func elevation_at(x: float, z: float, scale: float) -> float:
+	var span := maxf(max_height - sea_level, 0.001)
+	var t := (height_at(x, z) - sea_level) / span
+	if t >= 0.0:
+		return _shape_coast(t) * span * scale
+	return t * SEABED_GAIN * span * scale
+
+
+## Hebt die Uferzone an, ohne die Gesamthoehe zu veraendern.
+func _shape_coast(t: float) -> float:
+	if t < COAST_ZONE:
+		return t * COAST_GAIN
+	# Der Rest wird so gestaucht, dass der hoechste Punkt gleich bleibt.
+	var above := (1.0 - COAST_ZONE * COAST_GAIN) / (1.0 - COAST_ZONE)
+	return COAST_ZONE * COAST_GAIN + (t - COAST_ZONE) * above
 
 
 ## Bestimmt den Meeresspiegel so, dass der Landanteil stimmt.
@@ -234,16 +284,17 @@ func _scan_landmasses() -> void:
 	_build_chunk_map(height)
 
 
-## Markiert alle Chunks, die Land beruehren - plus deren direkte Nachbarn,
-## damit der Uebergang von Strand zu Flachwasser vollstaendig gemesht wird.
+## Markiert alle Chunks mit sichtbarem Gelaende - Land, Kueste und der
+## Meeresboden davor - plus deren direkte Nachbarn.
 func _build_chunk_map(height: PackedFloat32Array) -> void:
 	chunk_grid_size = int(ceil(world_size / TERRAIN_CHUNK_SIZE))
 	_chunk_has_land.resize(chunk_grid_size * chunk_grid_size)
 	_chunk_has_land.fill(0)
 
+	var visible_floor := sea_level - SUBMERGED_MARGIN
 	for iz in ANALYSIS_SIZE:
 		for ix in ANALYSIS_SIZE:
-			if height[iz * ANALYSIS_SIZE + ix] <= sea_level:
+			if height[iz * ANALYSIS_SIZE + ix] <= visible_floor:
 				continue
 			var world := _cell_to_world(ix, iz)
 			var coord := chunk_coord_at(world.x, world.y)
@@ -274,7 +325,8 @@ func chunk_origin(coord: Vector2i) -> Vector2:
 	)
 
 
-## Braucht dieser Chunk ein Gelaendemesh?
+## Braucht dieser Chunk ein Gelaendemesh? Das gilt auch fuer Flachwasser -
+## der Meeresboden gehoert dazu, sonst hat das Gelaende keine Unterseite.
 func chunk_has_land(coord: Vector2i) -> bool:
 	if coord.x < 0 or coord.y < 0 or coord.x >= chunk_grid_size or coord.y >= chunk_grid_size:
 		return false

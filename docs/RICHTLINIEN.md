@@ -153,13 +153,28 @@ Rotationsmatrix landet transponiert in der Szene, und die Transponierte einer Ro
 ihre Umkehrung. So zeigte der Klüverbaum nach unten. Gedrehte Transforms werden mit
 `tests/capture_ship.tscn` nachgeprüft.
 
-### B9. Kommentare erklären das Warum
+### B9. Geländeflächen rendern beidseitig
+
+Das Geländematerial läuft mit `CULL_DISABLED`.
+
+**Warum:** An steilen Küsten hat ein Höhenfeld ein Zickzack-Profil — benachbarte
+Dreiecke zeigen abwechselnd zur Kamera und von ihr weg. Mit Rückseiten-Culling
+verschwinden die abgewandten, und man sieht durch die Küste hindurch. Die Insel zerfiel
+in schwebende Fetzen und wirkte durchsichtig. Wird automatisch geprüft.
+
+Die Fehlersuche dazu ist ein Lehrstück: Zuerst sah es nach einem Z-Fighting-Problem mit
+der Fernsee aus, dann nach zu flachen Küsten. Beides wurde geändert, beides half nicht.
+Erst das Abschalten des Cullings als *einzelne* Prüfung zeigte die Ursache. Die
+Steilheitskurve, die zwischenzeitlich gegen ein Symptom eingeführt wurde, steht jetzt
+auf einem milden Wert — mit 5,0 erzeugte sie Klippen rund um jede Insel.
+
+### B10. Kommentare erklären das Warum
 
 Was der Code tut, steht im Code. Kommentare begründen Entscheidungen, nennen
 Größenordnungen und warnen vor Fallen. Jede Konstante, deren Wert nicht offensichtlich
 ist, bekommt einen Satz dazu.
 
-### B10. Sprache
+### B11. Sprache
 
 | Wo | Sprache |
 |---|---|
@@ -223,6 +238,7 @@ durch Probieren. Performance wird beziffert, nicht geschätzt.
 
 - **A3** — kein `Color(...)` außerhalb von `palette.gd`
 - **B7** — kein `rotation.y` außerhalb von `ship.gd`
+- **B9** — das Geländematerial rendert beidseitig und nutzt Vertex-Farben
 
 Dazu prüft `_check_everything_loads()`, dass jedes Skript kompiliert und jede Szene ihre
 Skripte behält. `load()` liefert bei einem Parse-Fehler trotzdem ein Objekt zurück — es
