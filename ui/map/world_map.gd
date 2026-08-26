@@ -104,12 +104,13 @@ func _draw_ship() -> void:
 	if ship == null:
 		return
 	var point := _world_to_map(Vector2(ship.global_position.x, ship.global_position.z))
-	var heading := ship.rotation.y
+	var heading: float = ship.heading()
 
-	# Dreieck in Fahrtrichtung. Auf der Karte ist oben Norden.
-	var tip := point + Vector2(sin(heading), -cos(heading)) * 9.0
-	var left := point + Vector2(sin(heading + 2.4), -cos(heading + 2.4)) * 6.0
-	var right := point + Vector2(sin(heading - 2.4), -cos(heading - 2.4)) * 6.0
+	# Dreieck in Fahrtrichtung. Auf der Karte ist oben Norden, und die
+	# Kartenrichtung ist dieselbe wie die Weltrichtung in XZ.
+	var tip := point + SailingMath.direction(heading) * 9.0
+	var left := point + SailingMath.direction(heading + 2.4) * 6.0
+	var right := point + SailingMath.direction(heading - 2.4) * 6.0
 
 	_canvas.draw_colored_polygon(
 		PackedVector2Array([tip, left, point, right]), Color(0.98, 0.98, 0.98)

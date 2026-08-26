@@ -27,9 +27,13 @@ func _process(_delta: float) -> void:
 	if ship == null:
 		return
 
-	var efficiency := ship.efficiency()
-	_point_of_sail.text = ship.point_of_sail()
-	_point_of_sail.add_theme_color_override("font_color", _efficiency_color(efficiency))
+	if ship.aground:
+		_point_of_sail.text = "Auf Grund"
+		_point_of_sail.add_theme_color_override("font_color", COL_BAD)
+	else:
+		var efficiency := ship.efficiency()
+		_point_of_sail.text = ship.point_of_sail()
+		_point_of_sail.add_theme_color_override("font_color", _efficiency_color(efficiency))
 
 	_speed.text = "%.1f kn" % ship.speed
 	_sail.text = ship.sail_name()

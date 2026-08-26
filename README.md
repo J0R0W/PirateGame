@@ -3,8 +3,8 @@
 Ein Piraten-Sandbox-Spiel in der Tradition von *Sid Meier's Pirates!*, gebaut mit Godot 4.7.
 3D-Präsentation, prozedural erzeugte Karibik, eigene Systeme statt originalgetreuem Nachbau.
 
-**Status:** M1 abgenommen (Segeln fühlt sich gut an). M2 — Weltgenerierung und Seekarte stehen,
-als Nächstes 3D-Terrain mit Chunk-Streaming.
+**Status:** M2 abgeschlossen — die Welt existiert als Land, an dem man vorbeisegelt.
+Als Nächstes M3: Andocken und der erste Hafen.
 
 ## Dokumentation
 
@@ -24,10 +24,10 @@ godot --path .
 godot --headless --path . res://tests/smoke_test.tscn
 ```
 
-101 Prüfungen: Autoloads, Eingabebelegung, Kampagnenstart, Speicher-Roundtrip,
-Segelmathematik, Wellenfeld, Schiffsgeometrie und die komplette Weltgenerierung
-(Landanteil, Weltrand, Hafenabstände, Nationsbesitz, Wirtschaft, Determinismus).
-Exit-Code 0 = bestanden.
+132 Prüfungen: Autoloads, Eingabebelegung, Kampagnenstart, Speicher-Roundtrip,
+Segelmathematik, Winkelkonvention, Wellenfeld, Schiffsgeometrie, Weltgenerierung
+(Landanteil, Weltrand, Hafenabstände, Nationsbesitz, Wirtschaft, Determinismus)
+sowie Gelände-Chunks und Grundberührung. Exit-Code 0 = bestanden.
 
 ```bash
 godot --path . res://tests/capture_sailing.tscn
@@ -46,6 +46,9 @@ Zeigt das Schiffsmodell aus vier festen Winkeln vor ruhiger Wasserlinie. Im
 Segelmodus verdeckt die Verfolgerkamera genau die Details, die man beim
 Modellieren beurteilen muss.
 
+Die Sichtprüfung meldet nebenbei Bildrate und Chunk-Zahl — Performance war das
+erklärte Hauptrisiko von M2.
+
 ```bash
 godot --headless --path . res://tests/world_report.tscn
 ```
@@ -60,7 +63,7 @@ Städte je Nation, Beispielwirtschaft. Zum Justieren der Generator-Parameter.
 | `autoload/` | Singletons: `EventBus`, `GameState`, `WorldData`, `SceneRouter`, `SaveManager`, `AudioDirector` |
 | `data/` | Resource-Klassen (`ShipClass`, `TownData`, `NationData`, `CargoType`, `OfficerData`) |
 | `resources/` | Konkrete `.tres`-Instanzen — hier wird balanciert, nicht im Code |
-| `world/` | Weltgenerierung, Chunk-Streaming, Ozean-Shader und Wellenformel |
+| `world/` | Weltgenerierung, Gelände-Chunks mit Streaming, Ozean-Shader und Wellenformel |
 | `modes/` | Die Modus-Szenen: `sailing`, `port`, `boarding`, `menu` |
 | `entities/` | Schiffe, Geschosse |
 | `ui/` | HUD, Seekarte, Hafenbildschirme, Theme |
@@ -70,6 +73,17 @@ Städte je Nation, Beispielwirtschaft. Zum Justieren der Generator-Parameter.
 
 **Modus-Szenen kennen einander nie direkt.** Kommunikation läuft über `GameState`
 (Zustand) und `EventBus` (Signale); Szenenwechsel ausschließlich über `SceneRouter`.
+
+**Die Winkelkonvention ist Navigation, nicht Godot.** `heading()` liefert
+0 = Nord, 90° = Ost. Godots `rotation.y` dreht genau andersherum. Die Umrechnung
+steht ausschließlich in `Ship.heading()` und `Ship.set_heading()` — nirgends
+sonst direkt auf `rotation.y` rechnen. Für Richtungsvektoren gibt es
+`SailingMath.direction()` und `angle_of()`.
+
+**Vertex-Farben sind linear, nicht sRGB.** Godot 4 interpretiert Farben in
+Mesh-Arrays als linear. Wer eine sRGB-Palette hinschreibt, bekommt ausgewaschene
+Ergebnisse — die Inseln sahen aus wie Schneefelder. `srgb_to_linear()` gehört
+an jede Vertex-Farbe.
 
 **Transform-Basen stehen in `.tscn` zeilenweise.** Eine spaltenweise gerechnete
 Rotationsmatrix landet transponiert in der Szene — und die Transponierte einer

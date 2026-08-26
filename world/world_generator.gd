@@ -35,6 +35,10 @@ const MAX_TOWNS_RANGE: Vector2i = Vector2i(26, 40)
 
 var max_towns: int = 40
 
+## Kantenlaenge eines Gelaende-Chunks in Metern. Bei 64 m waeren fuer die
+## Sichtweite ueber 250 Chunks noetig - mit 256 m sind es unter 50.
+const TERRAIN_CHUNK_SIZE: float = 256.0
+
 ## Handelsgueter. Werden in M3 zu echten CargoType-Resources.
 const RAW_GOODS: PackedStringArray = [
 	"Zucker", "Tabak", "Kakao", "Kaffee", "Baumwolle", "Holz", "Gewürze",
@@ -59,6 +63,12 @@ var nations: Array[NationData] = []
 ## Zelle -> Insel-Id, -1 bei Wasser.
 var _cell_island: PackedInt32Array = PackedInt32Array()
 var _cell_size: float = 40.0
+
+## Chunk-Belegung: 1, wenn der Chunk Land beruehrt. Ueber offener See braucht
+## es kein Gelaendemesh - der Ozean-Shader deckt das ab. Bei 14 Prozent
+## Landanteil spart das rund fuenf Sechstel der Arbeit.
+var chunk_grid_size: int = 0
+var _chunk_has_land: PackedByteArray = PackedByteArray()
 
 
 func generate(world_seed: int, size: float, nation_list: Array[NationData]) -> void:
@@ -220,6 +230,55 @@ func _scan_landmasses() -> void:
 		var extent := _cell_to_world(max_cell.x, max_cell.y) - origin
 		island.bounds = Rect2(origin, extent)
 		islands.append(island)
+
+	_build_chunk_map(height)
+
+
+## Markiert alle Chunks, die Land beruehren - plus deren direkte Nachbarn,
+## damit der Uebergang von Strand zu Flachwasser vollstaendig gemesht wird.
+func _build_chunk_map(height: PackedFloat32Array) -> void:
+	chunk_grid_size = int(ceil(world_size / TERRAIN_CHUNK_SIZE))
+	_chunk_has_land.resize(chunk_grid_size * chunk_grid_size)
+	_chunk_has_land.fill(0)
+
+	for iz in ANALYSIS_SIZE:
+		for ix in ANALYSIS_SIZE:
+			if height[iz * ANALYSIS_SIZE + ix] <= sea_level:
+				continue
+			var world := _cell_to_world(ix, iz)
+			var coord := chunk_coord_at(world.x, world.y)
+			for dz in range(-1, 2):
+				for dx in range(-1, 2):
+					var cx := coord.x + dx
+					var cz := coord.y + dz
+					if cx < 0 or cz < 0 or cx >= chunk_grid_size or cz >= chunk_grid_size:
+						continue
+					_chunk_has_land[cz * chunk_grid_size + cx] = 1
+
+
+## Weltposition -> Chunk-Koordinate.
+func chunk_coord_at(x: float, z: float) -> Vector2i:
+	var half := world_size * 0.5
+	return Vector2i(
+		floori((x + half) / TERRAIN_CHUNK_SIZE),
+		floori((z + half) / TERRAIN_CHUNK_SIZE)
+	)
+
+
+## Ecke eines Chunks in Weltkoordinaten.
+func chunk_origin(coord: Vector2i) -> Vector2:
+	var half := world_size * 0.5
+	return Vector2(
+		-half + float(coord.x) * TERRAIN_CHUNK_SIZE,
+		-half + float(coord.y) * TERRAIN_CHUNK_SIZE
+	)
+
+
+## Braucht dieser Chunk ein Gelaendemesh?
+func chunk_has_land(coord: Vector2i) -> bool:
+	if coord.x < 0 or coord.y < 0 or coord.x >= chunk_grid_size or coord.y >= chunk_grid_size:
+		return false
+	return _chunk_has_land[coord.y * chunk_grid_size + coord.x] == 1
 
 
 ## Sucht tiefes Wasser im Umkreis. Direkt neben der Kueste ist das Wasser

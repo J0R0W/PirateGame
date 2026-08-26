@@ -25,7 +25,13 @@ func _ready() -> void:
 	# Wind festnageln, sonst dreht er waehrend der Aufnahme weg.
 	_pin_wind(deg_to_rad(90.0))
 
-	await _wait(4.5)
+	# Chunks brauchen ein paar Frames, bis sie stehen.
+	await _wait(2.0)
+	var terrain: Node3D = mode.get_node("Terrain")
+	print("  Chunks geladen: %d" % terrain.loaded_count())
+	_report_performance(terrain)
+
+	await _wait(2.5)
 	await _shot("01_raumschots")
 
 	Input.action_press("helm_starboard")
@@ -46,6 +52,21 @@ func _ready() -> void:
 	await _shot("04_seekarte")
 
 	get_tree().quit(0)
+
+
+## Misst die Bildrate ueber zwei Sekunden Fahrt bei geladenem Gelaende.
+func _report_performance(terrain: Node3D) -> void:
+	var frames := 0
+	var started := Time.get_ticks_msec()
+	var worst := 0.0
+	while Time.get_ticks_msec() - started < 2000:
+		var frame_started := Time.get_ticks_usec()
+		await get_tree().process_frame
+		worst = maxf(worst, float(Time.get_ticks_usec() - frame_started) / 1000.0)
+		frames += 1
+	var elapsed := float(Time.get_ticks_msec() - started) / 1000.0
+	print("  Bildrate: %.0f fps im Mittel, langsamster Frame %.1f ms, %d Chunks"
+		% [float(frames) / elapsed, worst, terrain.loaded_count()])
 
 
 func _pin_wind(direction: float) -> void:

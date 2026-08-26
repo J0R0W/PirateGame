@@ -3,10 +3,15 @@
 ## Bewusst als statische Funktionen ausgelagert: So laesst sich das Herzstueck
 ## des Spiels testen, ohne eine Szene zu starten. Siehe tests/smoke_test.tscn.
 ##
-## Winkelkonvention im ganzen Projekt:
-##   Ein Winkel von 0 zeigt nach -Z (Norden), positive Werte drehen nach Osten.
+## Winkelkonvention im ganzen Projekt (Navigationswinkel):
+##   0 = Nord, PI/2 = Ost, PI = Sued, -PI/2 = West.
+##   Die Weltrichtung dazu ist (sin a, -cos a) in der XZ-Ebene, denn -Z ist Nord.
 ##   [param wind_direction] ist die Richtung, AUS DER der Wind kommt.
 ##   Faehrt das Schiff genau in den Wind, ist die Differenz also 0 - "In Irons".
+##
+## ACHTUNG: Godots rotation.y laeuft entgegengesetzt. Die Umrechnung passiert
+## ausschliesslich in Ship.heading() und Ship.set_heading() - nirgends sonst
+## direkt auf rotation.y rechnen.
 class_name SailingMath
 extends RefCounted
 
@@ -18,6 +23,15 @@ const SAIL_NAMES: PackedStringArray = ["Eingeholt", "Gerefft", "Halbe Segel", "V
 const IRONS_LIMIT: float = 30.0
 const CLOSE_HAULED_LIMIT: float = 60.0
 const BROAD_REACH_LIMIT: float = 150.0
+
+## Weltrichtung zu einem Navigationswinkel, in der XZ-Ebene.
+static func direction(navigation_angle: float) -> Vector2:
+	return Vector2(sin(navigation_angle), -cos(navigation_angle))
+
+
+## Navigationswinkel zu einer Weltrichtung in der XZ-Ebene.
+static func angle_of(direction_xz: Vector2) -> float:
+	return atan2(direction_xz.x, -direction_xz.y)
 
 
 ## Wie gut steht das Segel zum Wind? 0.0 = Stillstand, 1.0 = optimal.

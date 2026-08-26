@@ -9,8 +9,13 @@ enum Weather { CLEAR, CLOUDY, RAIN, STORM }
 
 ## Kantenlaenge der Welt in Metern.
 const WORLD_SIZE: float = 20480.0
-## Kantenlaenge eines Gelaende-Chunks in Metern.
-const CHUNK_SIZE: float = 64.0
+## Kantenlaenge eines Gelaende-Chunks in Metern. Muss zu
+## WorldGenerator.TERRAIN_CHUNK_SIZE passen.
+const CHUNK_SIZE: float = 256.0
+## Wie hoch ragt Land ueber den Meeresspiegel? Hoehenwerte sind 0 bis 1, die
+## Landspanne betraegt nur rund 0,25 davon - ohne kraeftige Ueberhoehung waeren
+## Inseln flache Platten.
+const TERRAIN_HEIGHT_SCALE: float = 1400.0
 
 # --- Weltdefinition ---
 var world_seed: int = 0
@@ -161,6 +166,19 @@ func set_wind(direction: float, strength: float = -1.0) -> void:
 	EventBus.wind_changed.emit(wind_direction, wind_strength)
 
 
-## Welt-Position -> Chunk-Koordinate. Basis fuer das Streaming in M2.
+## Welt-Position -> Chunk-Koordinate.
 func chunk_coord_at(position: Vector3) -> Vector2i:
-	return Vector2i(floori(position.x / CHUNK_SIZE), floori(position.z / CHUNK_SIZE))
+	if generator == null:
+		return Vector2i.ZERO
+	return generator.chunk_coord_at(position.x, position.z)
+
+
+## Gelaendehoehe in Metern ueber dem Meeresspiegel. Negativ unter Wasser.
+func terrain_y(x: float, z: float) -> float:
+	if generator == null:
+		return -50.0
+	return (generator.height_at(x, z) - generator.sea_level) * TERRAIN_HEIGHT_SCALE
+
+
+func sea_level() -> float:
+	return generator.sea_level if generator != null else 0.5

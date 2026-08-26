@@ -4,7 +4,7 @@ Ein Piraten-Sandbox-Spiel in der Tradition von *Sid Meier's Pirates!*, gebaut mi
 3D-Präsentation im Stil des 2004er-Remakes, prozedural erzeugte Karibik, eigene Systeme statt
 originalgetreuem Nachbau.
 
-**Status:** M2 im Bau · **Engine:** Godot 4.7.1 stable · **Sprache:** GDScript
+**Status:** M2 abgeschlossen · **Engine:** Godot 4.7.1 stable · **Sprache:** GDScript
 
 ---
 
@@ -631,8 +631,25 @@ Zwei Abweichungen vom ursprünglichen Konzept, beide aus der Praxis:
   „Tiefwasser als direkter Nachbar“ verwarf jeden Hafenplatz — direkt neben der Küste
   ist das Wasser immer flach.
 
-**Offen in M2:** 3D-Terrain mit Chunk-Streaming. Die Welt existiert bisher als Daten
-und als Karte, noch nicht als Land, an dem man vorbeisegelt.
+**M2 abgeschlossen.** Das Gelände wird als Chunks von 256 Metern gestreamt, aber nur
+dort, wo Land ist — über offener See übernimmt der Ozean-Shader. Bei 14 % Landanteil
+trägt nur rund ein Viertel der Chunks in Sichtweite überhaupt Geometrie. Gemessen:
+74 fps bei 60 geladenen Chunks, 1,3 km Sichtweite.
+
+Kollision mit Land läuft ohne Collision-Mesh: Die Höhenfunktion beantwortet die Frage
+direkt und billiger, als ein Collider für jede Insel es könnte.
+
+Drei weitere Korrekturen aus der Praxis:
+
+- **Die Winkelkonvention war gespiegelt.** Godots `rotation.y` dreht nach Westen, die
+  Navigation nach Osten. Das Segelverhalten blieb korrekt — `sail_efficiency` nutzt nur
+  die Differenz — aber Kompass, Seekarte und Startausrichtung zeigten spiegelverkehrt.
+  Das Schiff startete mit Blick aufs offene Meer statt auf die Küste.
+- **Vertex-Farben sind in Godot 4 linear, nicht sRGB.** Ohne Umrechnung wirkte jede
+  Insel wie ein Schneefeld.
+- **Die Sichtweite hing an der Ozean-Plane.** Sie reichte 450 m weit, also musste der
+  Dunst dicht genug sein, ihren Rand zu verbergen — und verschluckte damit auch die
+  Inseln. Eine große flache Fernsee unter den Wellen entkoppelt beides.
 
 Das Gate ist genommen: Segeln fühlt sich gut an. Am Modell wurde der Klüverbaum
 korrigiert — er zeigte nach unten und schwebte neben dem Rumpf, weil Godot

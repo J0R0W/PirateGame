@@ -1,4 +1,4 @@
-[gd_scene load_steps=9 format=3]
+[gd_scene load_steps=10 format=3]
 
 [ext_resource type="Script" path="res://modes/sailing/sailing_mode.gd" id="1_mode"]
 [ext_resource type="PackedScene" path="res://world/ocean/ocean.tscn" id="2_ocean"]
@@ -6,6 +6,7 @@
 [ext_resource type="Script" path="res://modes/sailing/follow_camera.gd" id="4_camera"]
 [ext_resource type="PackedScene" path="res://ui/hud/sailing_hud.tscn" id="5_hud"]
 [ext_resource type="PackedScene" path="res://ui/map/world_map.tscn" id="6_map"]
+[ext_resource type="Script" path="res://world/terrain/chunk_manager.gd" id="7_terrain"]
 
 [sub_resource type="ProceduralSkyMaterial" id="Sky_mat"]
 sky_top_color = Color(0.219608, 0.415686, 0.658824, 1)
@@ -27,10 +28,10 @@ ambient_light_energy = 0.6
 tonemap_mode = 2
 tonemap_white = 6.0
 fog_enabled = true
-fog_light_color = Color(0.729412, 0.803922, 0.847059, 1)
-fog_density = 0.005
+fog_light_color = Color(0.588235, 0.690196, 0.776471, 1)
+fog_density = 0.0009
 fog_sky_affect = 0.25
-fog_aerial_perspective = 0.5
+fog_aerial_perspective = 0.35
 
 [node name="SailingMode" type="Node3D"]
 script = ExtResource("1_mode")
@@ -41,6 +42,9 @@ environment = SubResource("Env_1")
 [node name="Sun" type="DirectionalLight3D" parent="."]
 light_energy = 1.15
 shadow_enabled = true
+
+[node name="Terrain" type="Node3D" parent="."]
+script = ExtResource("7_terrain")
 
 [node name="Ocean" parent="." instance=ExtResource("2_ocean")]
 

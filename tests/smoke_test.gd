@@ -22,6 +22,8 @@ func _ready() -> void:
 	_check_ocean_waves()
 	_check_world_generation()
 	_check_ship_model()
+	_check_heading_convention()
+	await _check_terrain()
 
 	print("=== %s ===" % ("BESTANDEN" if _failures == 0 else "%d FEHLER" % _failures))
 	get_tree().quit(1 if _failures > 0 else 0)
@@ -333,6 +335,131 @@ func _check_world_generation() -> void:
 		if h < 0.0 or h > 1.0 or is_nan(h):
 			in_range = false
 	_assert(in_range, "Hoehenfunktion bleibt in 0 bis 1")
+
+
+## Prueft Gelaende-Chunks und Grundberuehrung.
+func _check_terrain() -> void:
+	WorldData.generate(4242)
+	var g := WorldData.generator
+
+	# Chunk-Koordinaten muessen umkehrbar sein, sonst landen Meshes woanders.
+	var roundtrip_ok := true
+	for i in 200:
+		var half := WorldData.WORLD_SIZE * 0.5
+		var x := randf_range(-half, half)
+		var z := randf_range(-half, half)
+		var coord := g.chunk_coord_at(x, z)
+		var origin := g.chunk_origin(coord)
+		if x < origin.x or x >= origin.x + WorldGenerator.TERRAIN_CHUNK_SIZE \
+				or z < origin.y or z >= origin.y + WorldGenerator.TERRAIN_CHUNK_SIZE:
+			roundtrip_ok = false
+	_assert(roundtrip_ok, "Chunk-Koordinaten und Ursprung passen zusammen")
+
+	# Die Belegungskarte darf keinen Landchunk uebersehen - sonst fehlen Inseln.
+	var land_chunks := 0
+	var missed := 0
+	var total := 0
+	for cz in g.chunk_grid_size:
+		for cx in g.chunk_grid_size:
+			var coord := Vector2i(cx, cz)
+			total += 1
+			var origin := g.chunk_origin(coord)
+			var has_land := false
+			for sz in 8:
+				for sx in 8:
+					var px := origin.x + (float(sx) + 0.5) * WorldGenerator.TERRAIN_CHUNK_SIZE / 8.0
+					var pz := origin.y + (float(sz) + 0.5) * WorldGenerator.TERRAIN_CHUNK_SIZE / 8.0
+					if g.is_land(px, pz):
+						has_land = true
+			if g.chunk_has_land(coord):
+				land_chunks += 1
+			elif has_land:
+				missed += 1
+	_assert(missed == 0, "Belegungskarte uebersieht keinen Landchunk")
+	_assert(land_chunks > 0, "Es gibt Chunks mit Land")
+	# Ueber offener See darf kein Mesh entstehen, sonst ist das Streaming sinnlos.
+	var share := float(land_chunks) / float(total)
+	_assert(share < 0.5, "Nur ein Teil der Chunks traegt Land (%.0f%%)" % (share * 100.0))
+
+	# Hoehen in Metern: ueber dem Meeresspiegel positiv, darunter negativ.
+	var land_town: TownData = WorldData.towns[0]
+	_assert(WorldData.terrain_y(land_town.position.x, land_town.position.y) > 0.0,
+		"Stadt liegt ueber dem Meeresspiegel")
+	_assert(WorldData.terrain_y(0.0, WorldData.WORLD_SIZE * 0.49) < 0.0,
+		"Weltrand liegt unter dem Meeresspiegel")
+
+	# Mesh eines Landchunks: Vertexzahl und Ausdehnung muessen stimmen.
+	var sample := Vector2i.ZERO
+	for cz in g.chunk_grid_size:
+		for cx in g.chunk_grid_size:
+			if g.chunk_has_land(Vector2i(cx, cz)):
+				sample = Vector2i(cx, cz)
+				break
+	var resolution := 16
+	var mesh := TerrainChunk.build(g, sample, resolution, WorldData.TERRAIN_HEIGHT_SCALE)
+	_assert(mesh.get_surface_count() == 1, "Chunk-Mesh hat eine Oberflaeche")
+	var arrays := mesh.surface_get_arrays(0)
+	var vertices: PackedVector3Array = arrays[Mesh.ARRAY_VERTEX]
+	_assert(vertices.size() == (resolution + 1) * (resolution + 1), "Vertexzahl passt zur Aufloesung")
+	var aabb := mesh.get_aabb()
+	_assert(absf(aabb.size.x - WorldGenerator.TERRAIN_CHUNK_SIZE) < 1.0,
+		"Chunk-Mesh ist so breit wie sein Chunk")
+	_assert(aabb.position.y >= TerrainChunk.SEABED_FLOOR - 0.1,
+		"Mesh reicht nicht tiefer als der Meeresboden")
+
+	# Grundberuehrung: Land muss das Schiff aufhalten.
+	var packed: PackedScene = load("res://entities/ship/ship.tscn")
+	var ship: Node3D = packed.instantiate()
+	ship.set("player_controlled", false)
+	add_child(ship)
+	ship.global_position = Vector3(land_town.position.x, 0.0, land_town.position.y)
+	ship.set("speed", 10.0)
+	await get_tree().physics_frame
+	await get_tree().physics_frame
+	_assert(ship.get("aground"), "Schiff laeuft an Land auf")
+	_assert(is_zero_approx(ship.get("speed")), "Aufgelaufenes Schiff steht")
+	ship.queue_free()
+
+
+## Nagelt die Winkelkonvention fest.
+##
+## Anlass: Godots rotation.y dreht nach Westen, die Navigationskonvention nach
+## Osten. Das Segelverhalten blieb korrekt, weil nur Differenzen zaehlen - aber
+## Kompass, Seekarte und Startausrichtung waren an der Nord-Sued-Achse
+## gespiegelt. Das Schiff schaute aufs offene Meer statt auf die Kueste.
+func _check_heading_convention() -> void:
+	# Reine Mathematik: Weltrichtung zu Navigationswinkel und zurueck.
+	var north := SailingMath.direction(0.0)
+	var east := SailingMath.direction(PI * 0.5)
+	var south := SailingMath.direction(PI)
+	var west := SailingMath.direction(-PI * 0.5)
+	_assert(north.is_equal_approx(Vector2(0.0, -1.0)), "Kurs 0 zeigt nach Norden (-Z)")
+	_assert(east.is_equal_approx(Vector2(1.0, 0.0)), "Kurs 90 Grad zeigt nach Osten (+X)")
+	_assert(south.is_equal_approx(Vector2(0.0, 1.0)), "Kurs 180 Grad zeigt nach Sueden")
+	_assert(west.is_equal_approx(Vector2(-1.0, 0.0)), "Kurs -90 Grad zeigt nach Westen")
+
+	for angle: float in [0.0, 0.7, 1.9, -2.6, 3.0]:
+		_assert(is_equal_approx(
+			wrapf(SailingMath.angle_of(SailingMath.direction(angle)) - angle, -PI, PI), 0.0
+		), "Winkel und Richtung sind umkehrbar (%.1f)" % angle)
+
+	# Und jetzt am echten Node: Zeigt der Bug wirklich dorthin?
+	var packed: PackedScene = load("res://entities/ship/ship.tscn")
+	var ship: Node3D = packed.instantiate()
+	ship.set("player_controlled", false)
+	add_child(ship)
+	ship.set_physics_process(false)
+
+	for angle: float in [0.0, PI * 0.5, PI, -PI * 0.5, 1.1]:
+		ship.call("set_heading", angle)
+		var forward: Vector3 = -ship.global_basis.z
+		var expected: Vector2 = SailingMath.direction(angle)
+		var matches := absf(forward.x - expected.x) < 0.001 and absf(forward.z - expected.y) < 0.001
+		_assert(matches, "Bug zeigt bei Kurs %4.0f Grad in die richtige Richtung" % rad_to_deg(angle))
+		_assert(is_equal_approx(wrapf(ship.call("heading") - angle, -PI, PI), 0.0),
+			"heading() gibt zurueck, was set_heading() gesetzt hat")
+
+	ship.queue_free()
 
 
 ## Prueft die Geometrie des Schiffsmodells.

@@ -6,6 +6,7 @@ class_name Ship
 extends CharacterBody3D
 
 signal sail_setting_changed(step: int)
+signal ran_aground()
 
 @export_group("Fahrverhalten")
 ## Knoten bei idealem Wind und voller Besegelung.
@@ -30,6 +31,8 @@ var speed: float = 0.0
 var sail_step: int = 2
 ## Aktuelle Ruderlage, -1.0 bis 1.0.
 var helm: float = 0.0
+## Sitzt das Schiff auf Grund?
+var aground: bool = false
 
 ## Rumpfmasse fuer das Abtasten der Wellen, in Metern.
 const HALF_LENGTH: float = 3.6
@@ -80,14 +83,43 @@ func _physics_process(delta: float) -> void:
 
 	# Knoten in Meter pro Sekunde: 1 kn ~ 0.514 m/s.
 	velocity = -global_basis.z * speed * 0.514
+	_check_grounding(delta)
 	move_and_slide()
 
 	_apply_swell(delta)
 
 
-## Kurs des Schiffs im Projekt-Winkelraum: 0 = Norden (-Z), positiv nach Osten.
+## Haelt das Schiff vor der Kueste an.
+##
+## Kein Kollisionsmesh: Die Hoehenfunktion beantwortet die Frage direkt und
+## billiger, als ein Collider fuer jede Insel es koennte. Geprueft wird die
+## Position des naechsten Schrittes, damit das Schiff nicht erst im Land landet.
+func _check_grounding(delta: float) -> void:
+	var next := global_position + velocity * delta
+	if not WorldData.is_land(next.x, next.z):
+		aground = false
+		return
+
+	if not aground:
+		aground = true
+		ran_aground.emit()
+	speed = 0.0
+	velocity = Vector3.ZERO
+
+
+## Kurs des Schiffs als Navigationswinkel: 0 = Nord, PI/2 = Ost.
+##
+## Godot dreht andersherum: Bei rotation.y = t zeigt der Bug nach
+## (-sin t, -cos t), positive Rotation also nach WESTEN. Die Umrechnung steckt
+## hier an einer Stelle, damit Kompass, Karte und Windanzeige denselben Winkel
+## benutzen wie die Navigation. Siehe SailingMath fuer die Konvention.
 func heading() -> float:
-	return wrapf(rotation.y, -PI, PI)
+	return wrapf(-rotation.y, -PI, PI)
+
+
+## Setzt den Kurs als Navigationswinkel.
+func set_heading(navigation_angle: float) -> void:
+	rotation.y = -navigation_angle
 
 
 ## Kurs zum Wind, aufbereitet fuers HUD.
