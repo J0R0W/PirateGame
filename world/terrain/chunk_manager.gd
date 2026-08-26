@@ -16,7 +16,7 @@ extends Node3D
 ## Wieviele Chunks duerfen pro Frame entstehen?
 @export var chunks_per_frame: int = 3
 ## Quads je Chunkkante.
-@export var resolution: int = 32
+@export var resolution: int = WorldGenerator.TERRAIN_RESOLUTION
 
 var target: Node3D
 

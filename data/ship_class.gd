@@ -1,9 +1,12 @@
 ## Definition einer Schiffsklasse.
 ##
 ## Balancing passiert in .tres-Dateien unter resources/ships/, nicht im Code.
+## Die Feldnamen entsprechen denen in ship.gd - der Segelmodus schreibt die
+## Werte beim Start ins Schiff, damit es sie nur an einer Stelle gibt.
 class_name ShipClass
 extends Resource
 
+@export var id: StringName = &"sloop"
 @export var display_name: String = "Schaluppe"
 @export var description: String = ""
 ## Low-Poly-Modell als eigene Szene, damit Masten und Segel Kind-Nodes haben.
@@ -15,11 +18,13 @@ extends Resource
 
 @export_group("Fahrverhalten")
 ## Knoten bei idealem Wind und voller Besegelung.
-@export var base_speed: float = 10.0
+@export var base_speed: float = 12.0
 ## Grad pro Sekunde bei voller Fahrt.
-@export var turn_rate: float = 2.0
-## Wie traege das Schiff auf Ruder und Segel reagiert - hoeher = traeger.
-@export var inertia: float = 3.0
+@export var turn_rate_deg: float = 34.0
+## Wie traege die Fahrt auf Segelaenderungen reagiert, in Sekunden.
+@export var speed_inertia: float = 4.5
+## Wie traege das Ruder anspricht, in Sekunden.
+@export var turn_inertia: float = 1.2
 
 @export_group("Bewaffnung & Laderaum")
 @export var cannon_slots: int = 8

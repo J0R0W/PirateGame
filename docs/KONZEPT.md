@@ -489,7 +489,40 @@ ein Auto.
 - **Von Tag eins mit einer Versionsnummer im Save.** Wenn sich das Format ändert, kannst du alte
   Stände migrieren statt sie wegzuwerfen.
 
-### 7.7 Ordnerstruktur
+### 7.7 Die Wirtschaft — ein Preis aus einer einzigen Zahl
+
+Der Preis einer Ware in einer Stadt hängt an genau einer Größe: ihrem **Lagerbestand im
+Verhältnis zu ihrem Umschlag**. Volles Lager heißt billig, leeres Lager heißt teuer.
+Produktion, Bedarf und Stadtgröße wirken nur darüber, indem sie den Bestand verschieben.
+
+```
+Umschlag   = Grundbedarf + Produktion + Bedarf     (pro Woche)
+Faktor     = (Bestand / Umschlag) ^ -0.5           begrenzt durch die Volatilität der Ware
+Kaufpreis  = Basispreis × Faktor × (1 + Spanne/2)
+Verkauf    = Basispreis × Faktor × (1 - Spanne/2)
+```
+
+Drei Entscheidungen darin sind wichtiger als die Formel selbst:
+
+**Keine Buchhaltung.** Es wandern keine Waren von Stadt zu Stadt. Jeder Bestand läuft
+stattdessen auf seinen natürlichen Wert zu — ein Erzeuger auf das Dreifache seines
+Umschlags, ein Abnehmer auf ein Viertel. Solche Modelle kippen sonst: Entweder ersäuft
+die Karibik in Zucker oder alle Lager sind nach zwei Wochen leer, und man verbringt den
+Rest des Projekts damit, Zahlen nachzuregeln.
+
+**Die Handelsspanne.** Kaufen und sofort zurückverkaufen *muss* Geld kosten. Ohne diese
+Spanne wäre der Markt ein zinsloses Sparbuch, in dem man Gold zwischenparkt.
+
+**Preise steigen beim Kauf.** Eine Menge wird Stück für Stück abgerechnet: Jede gekaufte
+Einheit senkt den Bestand und hebt damit den Preis der nächsten. Wer den Markt leerkauft,
+zahlt für die letzten Einheiten deutlich mehr. Der Handel begrenzt sich dadurch selbst,
+ohne dass es eine künstliche Obergrenze bräuchte.
+
+Jede Stadt führt **jede** Ware, auch die, die sie weder erzeugt noch braucht — sonst hätte
+sie dafür ein leeres Lager, und ein leeres Lager heißt Höchstpreis. Man hätte Holz an
+jedes Dorf zum Doppelten verkaufen können.
+
+### 7.8 Ordnerstruktur
 
 ```
 PirateGame/
@@ -549,29 +582,29 @@ PirateGame/
 Meilensteine, jeder mit einem klaren **"fertig, wenn..."**-Kriterium. Die Zeitangaben gehen von
 Teilzeit-Entwicklung (10–15 Std./Woche) aus und beinhalten Einarbeitungszeit in Godot.
 
-### M0 — Fundament & Godot lernen *(2–3 Wochen)*
+### M0 — Fundament & Godot lernen ✅
 Godot-Projekt anlegen, Ordnerstruktur, Git-Workflow, Autoloads als leere Gerüste.
 Parallel: Godots offizielles "Dodge the Creeps"-Tutorial in **3D** durchgehen.
 > **Fertig, wenn:** Du eine Kugel mit WASD über eine Ebene steuerst, mit Verfolgerkamera.
 
-### M1 — Ein Schiff auf dem Wasser *(3–4 Wochen)*
+### M1 — Ein Schiff auf dem Wasser ✅
 Ozean-Shader, Schiffsmodell (Kenney-Asset genügt), Wind-System, Segelsteuerung, Kamera,
 Kompass-UI.
 > **Fertig, wenn:** Segeln sich gut anfühlt und du merkst, wenn der Wind dreht. **Dieser
 > Meilenstein entscheidet über das Projekt** — wenn Segeln keinen Spaß macht, hilft kein Feature
 > der Welt. Nimm dir hier Zeit.
 
-### M2 — Die Welt *(4–6 Wochen)*
+### M2 — Die Welt ✅
 Weltgenerator (Heightmap → Inseln → Städte → Nationen), Chunk-Streaming, Minimap, Namensgenerator.
 > **Fertig, wenn:** Du eine Stunde lang durch eine generierte Karibik segeln kannst, ohne dass
 > die Framerate einbricht oder Land aufploppt.
 
-### M3 — Der erste Hafen *(3–4 Wochen)*
+### M3 — Der erste Hafen ✅
 Andocken, Hafen-Szene, Markt mit Preisen, Werft für Reparatur, Gold-Wirtschaft.
 > **Fertig, wenn:** Du günstig kaufen, woanders teuer verkaufen und dein Schiff reparieren kannst.
 > **Ab hier existiert eine Gameplay-Schleife.**
 
-### M4 — Seekampf *(4–6 Wochen)*
+### M4 — Seekampf *(4–6 Wochen)*  ← als Nächstes
 Kanonen, Geschosse, Trefferzonen, Schadensmodell, Schiffs-KI (Verfolgen, Manövrieren, Feuern,
 Fliehen), Beute.
 > **Fertig, wenn:** Ein Gefecht gegen ein KI-Schiff spannend ist und Manövrieren belohnt wird.
@@ -656,22 +689,48 @@ korrigiert — er zeigte nach unten und schwebte neben dem Rumpf, weil Godot
 Transform-Basen in `.tscn` zeilenweise speichert und eine spaltenweise gerechnete
 Rotationsmatrix dort transponiert, also als Umkehrung, ankommt.
 
-Stellschrauben fürs Fahrverhalten in `entities/ship/ship.gd`: `base_speed`,
-`turn_rate_deg`, `speed_inertia`, `turn_inertia`. Wellenbild in
+**M3 abgeschlossen.** Ab hier existiert eine Gameplay-Schleife. Zwölf Warenarten als
+`.tres`-Dateien, ein Preismodell (Abschnitt 7.7), Anlegen bei 240 m Entfernung, ein
+Hafenbildschirm mit Markt und Werft, Auflaufen kostet Rumpf, die Werft nimmt Gold dafür.
+Der Rauchtest fährt die Abnahmebedingung selbst: 20 Fass Zucker im billigsten Hafen
+gekauft und im teuersten verkauft, 3000 → 3585 Gold — und dieselbe Route rückwärts ein
+Verlust.
+
+Vier Dinge kamen aus dem Rendern, nicht aus dem Code:
+
+- **Häfen waren in der Welt unsichtbar.** Man konnte anlegen, sah aber nur leere Küste.
+  Jede Stadt hat jetzt Häuser und eine Fahnenstange in Nationsfarbe — von See aus
+  erkennt man, wem der Hafen gehört, ohne die Karte zu öffnen.
+- **Die Häuser schwebten über dem Hang**, während die Fahnenstange daneben im Boden
+  steckte. Beide standen auf der mathematisch richtigen Höhe: `elevation_at()` liefert
+  die Höhenfunktion, gezeichnet werden aber die geraden Flächen zwischen den
+  Gitterpunkten, und die liegen acht Meter auseinander.
+- **Städte klebten an Steilküsten.** Der Generator ebnet jetzt einen Uferstreifen von
+  120 m um jede Stadt ein — nach unten *und* nach oben begrenzt, sonst standen Dörfer
+  auf Kliffs sechzig Meter über ihrem eigenen Hafen.
+- **Beim Auslaufen flog die Kamera quer über die Karibik.** Das Schiff wird versetzt,
+  nicht gefahren; die Kamera folgte träge und stand sekundenlang im Nirgendwo.
+
+Stellschrauben fürs Fahrverhalten jetzt in `resources/ships/sloop.tres` statt im Skript —
+der Segelmodus schreibt die Werte beim Start ins Schiff. Wellenbild in
 `world/ocean/ocean_waves.gd` (Konstanten dort und im Shader gemeinsam ändern).
+Preisbildung in `world/economy/trade_math.gd`, Warenpreise in `resources/cargo/*.tres`.
 
 ---
 
 ## 11. Nächste Schritte
 
-1. **Spielen.** `godot --path .` starten, „Neue Kampagne“, und eine Weile segeln. Kreuze
-   gegen den Wind auf. Wende. Achte darauf, wann das Ruder nicht mehr greift.
-2. **Gefühl beurteilen und nachjustieren** — siehe Abschnitt 10. Das ist der eigentliche
-   Inhalt von M1, nicht das Schreiben von Code.
-3. **Godot am eigenen Code lernen:** `ship.gd` und `follow_camera.gd` sind klein genug,
-   um sie ganz zu lesen. Werte ändern, starten, sehen was passiert — das ist der
-   schnellste Weg, `_physics_process`, `@export` und Node-Pfade zu verstehen.
-4. **Erst danach M2** — Weltgenerierung. Nicht vorher.
+1. **Spielen.** `godot --path .` starten, „Neue Kampagne“, zum nächsten Hafen segeln,
+   Leertaste. Kaufen, was grün ist. Zum nächsten Hafen. Verkaufen, was grün ist. Das ist
+   die Schleife — sie muss sich lohnen und lesbar sein, bevor Kanonen dazukommen.
+2. **Beurteilen, ob die Wirtschaft trägt.** Sind die Wege zu lang? Ist der Gewinn zu
+   klein oder zu groß? Stellschrauben: `TradeMath.SPREAD` (Handelsspanne),
+   `SCARCITY_EXPONENT` (wie stark Knappheit durchschlägt), die Basispreise in
+   `resources/cargo/*.tres` und `GameState.MINUTES_PER_SECOND` (Reisezeit).
+3. **`godot --headless --path . res://tests/world_report.tscn`** zeigt für eine
+   Beispielstadt alle zwölf Preise nebeneinander — schneller als im Spiel nachzusehen.
+4. **Erst danach M4** — Seekampf. Vorher sollte sich Handeln lohnen, sonst gibt es keinen
+   Grund, ein Schiff zu verteidigen.
 
 ### Empfohlene Lernquellen
 - **Godot Docs — "Your first 3D game"**: der offizielle Einstieg, sehr gut gepflegt

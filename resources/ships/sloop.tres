@@ -1,0 +1,20 @@
+[gd_resource type="Resource" script_class="ShipClass" load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://data/ship_class.gd" id="1_ship_class"]
+
+[resource]
+script = ExtResource("1_ship_class")
+id = &"sloop"
+display_name = "Schaluppe"
+description = "Klein, wendig, kaum bewaffnet. Sie lebt davon, schneller am Wind zu liegen als alles, was sie verfolgt."
+max_hull = 100
+max_sails = 100
+base_speed = 12.0
+turn_rate_deg = 34.0
+speed_inertia = 4.5
+turn_inertia = 1.2
+cannon_slots = 4
+cargo_capacity = 40
+min_crew = 8
+max_crew = 40
+base_price = 1200

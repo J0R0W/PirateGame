@@ -22,6 +22,51 @@ const ROCK_TOP: float = 360.0
 const SEABED_FLOOR: float = -40.0
 
 
+## Hoehe eines Gitterpunktes, so wie ihn das Mesh setzt.
+static func vertex_y(
+	generator: WorldGenerator, x: float, z: float, height_scale: float
+) -> float:
+	return maxf(generator.elevation_at(x, z, height_scale), SEABED_FLOOR)
+
+
+## Hoehe der GERENDERTEN Oberflaeche an einem beliebigen Punkt.
+##
+## [method WorldGenerator.elevation_at] liefert die mathematische Hoehe, das
+## Mesh zeigt aber die geraden Flaechen zwischen den Gitterpunkten. Zwischen
+## zwei Punkten liegen acht Meter, und an einer steilen Kueste weichen beide
+## Werte um mehrere Meter voneinander ab: Haeuser schwebten ueber dem Hang,
+## die Fahnenstange steckte darin.
+##
+## Wer etwas auf das Gelaende stellt, fragt deshalb hier - und nicht die
+## Hoehenfunktion.
+static func surface_y(
+	generator: WorldGenerator, x: float, z: float, resolution: int, height_scale: float
+) -> float:
+	var step := WorldGenerator.TERRAIN_CHUNK_SIZE / float(resolution)
+	# Das Gitter laeuft ueber die ganze Welt durch, nicht je Chunk von vorn.
+	var half := generator.world_size * 0.5
+	var cell_x := (x + half) / step
+	var cell_z := (z + half) / step
+	var gx := floorf(cell_x)
+	var gz := floorf(cell_z)
+	var fx := cell_x - gx
+	var fz := cell_z - gz
+
+	var x0 := -half + gx * step
+	var z0 := -half + gz * step
+	var h00 := vertex_y(generator, x0, z0, height_scale)
+	var h10 := vertex_y(generator, x0 + step, z0, height_scale)
+	var h01 := vertex_y(generator, x0, z0 + step, height_scale)
+	var h11 := vertex_y(generator, x0 + step, z0 + step, height_scale)
+
+	# Jedes Quad besteht aus zwei Dreiecken, die Diagonale laeuft von (1,0)
+	# nach (0,1) - siehe die Indexschleife in build(). Welches der beiden
+	# Dreiecke getroffen wird, entscheidet fx + fz.
+	if fx + fz <= 1.0:
+		return h00 + (h10 - h00) * fx + (h01 - h00) * fz
+	return h11 + (h01 - h11) * (1.0 - fx) + (h10 - h11) * (1.0 - fz)
+
+
 ## Erzeugt das Mesh fuer [param coord]. [param resolution] ist die Anzahl der
 ## Quads je Kante.
 static func build(
@@ -45,7 +90,7 @@ static func build(
 		for ix in line:
 			var world_x := origin.x + float(ix) * step
 			var world_z := origin.y + float(iz) * step
-			var y := maxf(generator.elevation_at(world_x, world_z, height_scale), SEABED_FLOOR)
+			var y := vertex_y(generator, world_x, world_z, height_scale)
 
 			var index := iz * line + ix
 			# Lokale Koordinaten - der Chunk-Node sitzt auf seinem Ursprung.

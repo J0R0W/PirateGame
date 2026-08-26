@@ -1,0 +1,12 @@
+[gd_resource type="Resource" script_class="CargoType" load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://data/cargo_type.gd" id="1_cargo"]
+
+[resource]
+script = ExtResource("1_cargo")
+id = &"cocoa"
+display_name = "Kakao"
+base_price = 115
+price_volatility = 0.40
+unit_size = 1
+contraband = false

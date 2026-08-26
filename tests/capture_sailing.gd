@@ -10,6 +10,7 @@ extends Node
 const OUT_DIR: String = "user://captures"
 
 var _ship: Ship
+var _camera_rig: Node3D
 
 
 func _ready() -> void:
@@ -21,6 +22,7 @@ func _ready() -> void:
 	add_child(mode)
 	await get_tree().process_frame
 	_ship = mode.get_node("PlayerShip")
+	_camera_rig = mode.get_node("CameraRig")
 
 	# Wind festnageln, sonst dreht er waehrend der Aufnahme weg.
 	_pin_wind(deg_to_rad(90.0))
@@ -41,7 +43,7 @@ func _ready() -> void:
 	await _shot("02_wende")
 
 	# Direkt in den Wind drehen - das HUD muss warnen.
-	_ship.rotation.y = deg_to_rad(90.0)
+	_ship.set_heading(deg_to_rad(90.0))
 	await _wait(2.0)
 	await _shot("03_in_irons")
 
@@ -50,8 +52,28 @@ func _ready() -> void:
 	map.toggle()
 	await _wait(1.0)
 	await _shot("04_seekarte")
+	map.toggle()
+
+	# Vor einen Hafen legen - die Anlegeaufforderung muss erscheinen.
+	await _approach_town()
+	await _shot("05_anlegen")
 
 	get_tree().quit(0)
+
+
+## Setzt das Schiff dicht vor eine Stadt, mit Blick auf sie.
+func _approach_town() -> void:
+	if WorldData.towns.is_empty():
+		return
+	var town: TownData = WorldData.towns[0]
+	var anchor := WorldData.anchorage_for(town)
+
+	_ship.global_position = Vector3(anchor.x, 0.0, anchor.y)
+	_ship.set_heading(SailingMath.angle_of(town.position - anchor))
+	# Wie beim Auslaufen aus einem Hafen: versetzt, nicht gefahren.
+	_camera_rig.snap()
+	print("  Hafen in Sicht: %s (%s)" % [town.town_name, town.tier_name()])
+	await _wait(2.5)
 
 
 ## Misst die Bildrate ueber zwei Sekunden Fahrt bei geladenem Gelaende.

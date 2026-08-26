@@ -1,18 +1,30 @@
-## Startbildschirm - zugleich der Funktionstest fuer das M0-Geruest.
+## Startbildschirm.
 ##
-## Ersetzt in M1 durch ein richtiges Menue. Im Moment beweist die Szene vor
-## allem, dass alle Autoloads geladen sind und miteinander reden.
+## Zugleich der Funktionstest fuer das Geruest: Die Szene beweist, dass alle
+## Autoloads geladen sind und miteinander reden.
 extends Control
 
 const SAVE_SLOT: int = 1
+## Steht unter dem Titel. Hier und nicht in der Szene, damit der Stand nicht
+## in einer .tscn veraltet, die niemand mehr aufmacht.
+const SUBTITLE: String = "Meilenstein M3 — Handel und Haefen"
 
 @onready var _new_game_button: Button = %NewGameButton
 @onready var _continue_button: Button = %ContinueButton
 @onready var _quit_button: Button = %QuitButton
 @onready var _status_label: Label = %StatusLabel
+@onready var _background: ColorRect = %Background
+@onready var _title: Label = %Title
+@onready var _subtitle: Label = %Subtitle
 
 
 func _ready() -> void:
+	_background.color = Palette.fade(Palette.BACKDROP, 1.0)
+	_title.add_theme_color_override("font_color", Palette.PARCHMENT)
+	_subtitle.add_theme_color_override("font_color", Palette.MUTED)
+	_status_label.add_theme_color_override("font_color", Palette.MUTED)
+	_subtitle.text = SUBTITLE
+
 	_new_game_button.pressed.connect(_on_new_game_pressed)
 	_continue_button.pressed.connect(_on_continue_pressed)
 	_quit_button.pressed.connect(get_tree().quit)

@@ -65,7 +65,24 @@ func to_sailing() -> void:
 	change_mode("res://modes/sailing/sailing_mode.tscn")
 
 
+## Legt im Hafen einer Stadt an.
+##
+## [member GameState.current_port_id] bleibt danach gesetzt, bis der Segelmodus
+## das Schiff wieder davor gesetzt hat - er ist zugleich die Ankunftsstelle bei
+## der Rueckkehr auf See.
 func enter_port(town_id: int) -> void:
+	var town := WorldData.get_town(town_id)
+	if town == null:
+		push_error("SceneRouter: Hafen %d gibt es nicht" % town_id)
+		return
+
 	GameState.time_running = false
+	GameState.current_port_id = town_id
+	town.discovered = true
 	EventBus.port_entered.emit(town_id)
-	# TODO(M3): change_mode("res://modes/port/port_mode.tscn")
+	change_mode("res://modes/port/port_mode.tscn")
+
+
+func leave_port() -> void:
+	EventBus.port_left.emit(GameState.current_port_id)
+	to_sailing()

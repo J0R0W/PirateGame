@@ -1,4 +1,4 @@
-[gd_scene load_steps=10 format=3]
+[gd_scene load_steps=11 format=3]
 
 [ext_resource type="Script" path="res://modes/sailing/sailing_mode.gd" id="1_mode"]
 [ext_resource type="PackedScene" path="res://world/ocean/ocean.tscn" id="2_ocean"]
@@ -7,6 +7,7 @@
 [ext_resource type="PackedScene" path="res://ui/hud/sailing_hud.tscn" id="5_hud"]
 [ext_resource type="PackedScene" path="res://ui/map/world_map.tscn" id="6_map"]
 [ext_resource type="Script" path="res://world/terrain/chunk_manager.gd" id="7_terrain"]
+[ext_resource type="Script" path="res://world/town/town_markers.gd" id="8_towns"]
 
 [sub_resource type="ProceduralSkyMaterial" id="Sky_mat"]
 sky_top_color = Color(0.219608, 0.415686, 0.658824, 1)
@@ -45,6 +46,9 @@ shadow_enabled = true
 
 [node name="Terrain" type="Node3D" parent="."]
 script = ExtResource("7_terrain")
+
+[node name="Towns" type="Node3D" parent="."]
+script = ExtResource("8_towns")
 
 [node name="Ocean" parent="." instance=ExtResource("2_ocean")]
 

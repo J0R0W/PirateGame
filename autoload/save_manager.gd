@@ -7,7 +7,8 @@ extends Node
 
 const SAVE_DIR: String = "user://saves"
 ## Bei Formataenderungen erhoehen und in _migrate() behandeln.
-const SAVE_VERSION: int = 1
+## 2: Schiff, Laderaum und die Lagerbestaende der Staedte kamen dazu.
+const SAVE_VERSION: int = 2
 
 
 func _ready() -> void:
@@ -35,14 +36,22 @@ func save_slot(slot: int) -> bool:
 			"reputation": _keys_to_strings(GameState.reputation),
 			"game_minutes": GameState.game_minutes,
 		},
+		"ship": {
+			"class": GameState.ship_class.resource_path if GameState.ship_class != null else "",
+			"hull": GameState.hull,
+			"sails": GameState.sails,
+			"cargo": _keys_to_strings(GameState.cargo),
+			"port": GameState.current_port_id,
+		},
 		"world": {
 			"seed": WorldData.world_seed,
 			"wind_direction": WorldData.wind_direction,
 			"wind_strength": WorldData.wind_strength,
 			"weather": int(WorldData.weather),
-			# TODO(M3): Abweichungen vom generierten Zustand - Stadtbesitzer,
-			# Lagerbestaende, Preise.
-			"town_overrides": {},
+			# Nur Abweichungen vom generierten Zustand. Produktion und Bedarf
+			# stehen im Seed, die Lager nicht - sie sind das Einzige, was der
+			# Spieler an einer Stadt veraendert.
+			"town_overrides": _town_overrides(),
 		},
 	}
 
@@ -89,7 +98,55 @@ func load_slot(slot: int) -> bool:
 	for key: String in player.get("reputation", {}):
 		GameState.reputation[int(key)] = int(player["reputation"][key])
 
+	_load_ship(data.get("ship", {}))
+	_apply_town_overrides(world.get("town_overrides", {}))
+	# Die Wirtschaft darf die Pause zwischen zwei Sitzungen nicht nachholen.
+	WorldData.reset_economy_clock()
+
 	return true
+
+
+## Die Lagerbestaende aller Staedte, als Stadt-Id -> Waren-Id -> Menge.
+func _town_overrides() -> Dictionary:
+	var result := {}
+	for town: TownData in WorldData.towns:
+		result[str(town.id)] = {
+			"stock": _keys_to_strings(town.stock),
+			"discovered": town.discovered,
+		}
+	return result
+
+
+func _apply_town_overrides(overrides: Dictionary) -> void:
+	for key: String in overrides:
+		var town := WorldData.get_town(int(key))
+		if town == null:
+			continue
+		var entry: Dictionary = overrides[key]
+		town.discovered = bool(entry.get("discovered", false))
+		# Waren-Ids sind StringName; JSON kennt nur Strings. Unbekannte Ids
+		# werden verworfen statt uebernommen - sonst schleppt ein alter
+		# Spielstand Waren mit, die es nicht mehr gibt.
+		for cargo_id: String in entry.get("stock", {}):
+			if CargoRegistry.has(StringName(cargo_id)):
+				town.stock[StringName(cargo_id)] = float(entry["stock"][cargo_id])
+
+
+func _load_ship(ship: Dictionary) -> void:
+	var class_path := str(ship.get("class", ""))
+	if not class_path.is_empty():
+		GameState.ship_class = load(class_path)
+	if GameState.ship_class == null:
+		GameState.ship_class = load(GameState.STARTING_SHIP)
+
+	GameState.hull = int(ship.get("hull", GameState.max_hull()))
+	GameState.sails = int(ship.get("sails", GameState.max_sails()))
+	GameState.current_port_id = int(ship.get("port", -1))
+
+	GameState.cargo.clear()
+	for cargo_id: String in ship.get("cargo", {}):
+		if CargoRegistry.has(StringName(cargo_id)):
+			GameState.cargo[StringName(cargo_id)] = int(ship["cargo"][cargo_id])
 
 
 func delete_slot(slot: int) -> void:
@@ -102,7 +159,14 @@ func _migrate(data: Dictionary) -> Dictionary:
 	var version := int(data.get("version", 0))
 	if version == SAVE_VERSION:
 		return data
-	# TODO: Bei Formataenderungen hier schrittweise migrieren.
+	if version == 1:
+		# Version 1 kannte weder Schiff noch Lagerbestaende. Die fehlenden
+		# Abschnitte bleiben leer - die Ladefunktion faellt dann auf die
+		# Startwerte und die frisch erzeugte Wirtschaft zurueck.
+		data["ship"] = {}
+		data["version"] = SAVE_VERSION
+		return data
+
 	push_warning("SaveManager: Spielstand hat Version %d, erwartet %d" % [version, SAVE_VERSION])
 	return data
 

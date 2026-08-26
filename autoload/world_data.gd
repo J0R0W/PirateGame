@@ -48,6 +48,16 @@ var wind_strength: float = 1.0
 
 var weather: Weather = Weather.CLEAR
 
+# --- Wirtschaft ---
+## Nach so vielen Spielminuten werden die Lager der Staedte fortgeschrieben.
+## Haeufiger waere Rechenzeit ohne sichtbaren Unterschied - ein Bestand
+## bewegt sich in zwei Stunden um Bruchteile eines Fasses.
+const ECONOMY_STEP_MINUTES: float = 120.0
+
+## Spielminuten beim letzten Wirtschaftsschritt. Die Zeit selbst liegt in
+## GameState - es gibt nur eine Uhr, und die Welt liest sie mit.
+var _last_economy_minutes: float = 0.0
+
 ## Zielwerte, auf die Richtung und Staerke langsam zulaufen.
 var _wind_target_direction: float = 0.0
 var _wind_target_strength: float = 1.0
@@ -63,6 +73,22 @@ func _process(delta: float) -> void:
 	if not generated:
 		return
 	_update_wind(delta)
+	_update_economy()
+
+
+## Laesst die Lager aller Staedte altern.
+##
+## Der Schritt haengt nur an der verstrichenen Spielzeit, nicht an der Bildrate
+## und nicht daran, ob der Spieler gerade in einem Hafen steht.
+func _update_economy() -> void:
+	var elapsed := GameState.game_minutes - _last_economy_minutes
+	if elapsed < ECONOMY_STEP_MINUTES:
+		return
+	_last_economy_minutes = GameState.game_minutes
+
+	var days := elapsed / 1440.0
+	for town: TownData in towns:
+		town.advance_economy(days)
 
 
 func _update_wind(delta: float) -> void:
@@ -105,6 +131,14 @@ func generate(new_seed: int) -> void:
 	islands = generator.islands
 
 	generated = true
+	reset_economy_clock()
+
+
+## Setzt die Wirtschaftsuhr auf den jetzigen Spielzeitpunkt.
+## Noetig nach dem Laden eines Spielstands - sonst holt die Wirtschaft die
+## Differenz zwischen zwei Spielstaenden in einem Schritt nach.
+func reset_economy_clock() -> void:
+	_last_economy_minutes = GameState.game_minutes
 
 
 func _load_nations() -> void:
@@ -131,6 +165,19 @@ func get_nation(nation_id: int) -> NationData:
 	return null
 
 
+## Ab dieser Entfernung zur Stadt laesst sich anlegen.
+##
+## Grosszuegig genug, dass man nicht auf den Meter genau manoevrieren muss -
+## die Staedte liegen mindestens 1200 Meter auseinander, verwechseln kann man
+## sie also nicht.
+const DOCK_RADIUS: float = 240.0
+
+
+## Stadt, in deren Hafen von [param position] aus angelegt werden kann.
+func dockable_town(position: Vector2) -> TownData:
+	return nearest_town(position, DOCK_RADIUS)
+
+
 ## Naechstgelegene Stadt zu einer Weltposition, oder null.
 func nearest_town(position: Vector2, max_distance: float = INF) -> TownData:
 	var best: TownData = null
@@ -152,6 +199,15 @@ func height_at(x: float, z: float) -> float:
 
 func is_land(x: float, z: float) -> bool:
 	return generator != null and generator.is_land(x, z)
+
+
+## Ankerplatz vor einer Stadt - der Punkt, an dem das Schiff beim Auslaufen
+## liegt. Vor der Generierung der Stadtort selbst.
+func anchorage_for(town: TownData) -> Vector2:
+	if generator == null or town == null:
+		return Vector2.ZERO
+	var island: IslandData = islands[town.island_id]
+	return generator.anchorage(town.position, island.center)
 
 
 ## Setzt den Wind fest auf einen Wert - er driftet danach von dort weiter.
@@ -178,6 +234,16 @@ func terrain_y(x: float, z: float) -> float:
 	if generator == null:
 		return -50.0
 	return generator.elevation_at(x, z, TERRAIN_HEIGHT_SCALE)
+
+
+## Hoehe der sichtbaren Gelaendeoberflaeche - der Wert, auf den Gebaeude,
+## Baeume und alles andere an Land gesetzt wird.
+func terrain_surface_y(x: float, z: float) -> float:
+	if generator == null:
+		return -50.0
+	return TerrainChunk.surface_y(
+		generator, x, z, WorldGenerator.TERRAIN_RESOLUTION, TERRAIN_HEIGHT_SCALE
+	)
 
 
 func sea_level() -> float:

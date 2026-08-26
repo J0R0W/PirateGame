@@ -29,20 +29,26 @@ verzeiht außerdem Ungenauigkeiten in Modellierung und Animation.
 
 ### A3. Eine Palette, eine Quelle
 
-Alle Farben stehen in `data/palette.gd`. Im übrigen Code steht **kein** `Color(...)`.
+Alle Farben stehen in `data/palette.gd`. Im übrigen Code steht **kein** `Color(...)`, und
+in `.tscn`-Dateien steht **kein** `theme_override_colors/`. Die Szene bestimmt die
+Anordnung, das Skript die Farbe — es setzt sie in `_ready()` aus der Palette.
 
 **Warum:** Vorher lagen dieselben Töne in sechs Dateien, teils leicht verschieden — Karte
-und Gelände zeigten unterschiedliches Grün für dieselbe Wiese. Wird automatisch geprüft.
+und Gelände zeigten unterschiedliches Grün für dieselbe Wiese. Eine Textfarbe in einer
+`.tscn` ist eine Zahlenkolonne, die niemand mehr mit der Palette abgleicht; das HUD trug
+zwölf davon. Beides wird automatisch geprüft.
 
-Ausnahme: Nationsfarben stehen in `resources/nations/*.tres`, weil sie Spieldaten sind
-und nicht Gestaltung.
+Ausnahmen: Nationsfarben stehen in `resources/nations/*.tres`, weil sie Spieldaten sind
+und nicht Gestaltung. 3D-Materialien und die Umgebung (Himmel, Dunst) bleiben in der
+Szene, weil sie im Editor mit Live-Vorschau eingestellt werden.
 
 | Gruppe | Konstanten |
 |---|---|
 | **See** | `DEEP_SEA` `SHALLOW_SEA` `SHOAL` `SEABED` `FOAM` |
 | **Land** | `SAND` `GRASS` `SCRUB` `ROCK` `PEAK` |
+| **Siedlungen** | `WALL` `ROOF` `PIER` |
 | **Schiff** | `HULL` `TIMBER` `CANVAS` |
-| **Anzeigen** | `HUD_TEXT` `HUD_DIM` `HUD_OUTLINE` `BACKDROP` |
+| **Anzeigen** | `HUD_TEXT` `HUD_DIM` `HUD_OUTLINE` `BACKDROP` `PARCHMENT` `MUTED` |
 | **Zustand** | `GOOD` `FAIR` `BAD` |
 | **Akzent** | `BRASS` (Wind, Gold, Nautisches) · `DANGER` (Warnung, Sperrsektor) |
 
@@ -51,19 +57,29 @@ und nicht Gestaltung.
 `GOOD` / `FAIR` / `BAD` bedeuten etwas. Sie werden nie zur Dekoration benutzt, und der
 Akzent `BRASS` wird nie zur Zustandsanzeige. Sonst verlieren beide ihre Aussage.
 
-### A5. Karte zeigt, was die Welt zeigt
+### A5. Grün heißt „gut für dich"
+
+Farbe zeigt in Listen eine **Richtung**, keinen Wert. Im Markt ist ein niedriger Kaufpreis
+grün und ein hoher Verkaufspreis ebenfalls — beides ist ein Vorteil für den Spieler. Die
+Gegenrichtung wird **abgeblendet**, nicht rot.
+
+**Warum:** Zuerst war die Gegenrichtung rot. Bei zwölf Waren standen dann zwölf rote
+Zahlen auf dem Bildschirm, und ein mittelmäßiger Zuckerpreis sah aus wie ein Leck im
+Rumpf. Rot bedeutet in diesem Spiel Schaden und Gefahr — siehe [A4](#a4-zustandsfarben-sind-kein-akzent).
+
+### A6. Karte zeigt, was die Welt zeigt
 
 Eine Wiese hat auf der Seekarte dieselbe Farbe wie unter dem Kiel. `MapImage` und
 `TerrainChunk` greifen auf dieselben Palettenkonstanten zu.
 
-### A6. Das HUD trägt keine Kästen
+### A7. Das HUD trägt keine Kästen
 
 Text steht frei über der Szene, lesbar durch Kontur (`HUD_OUTLINE`), nicht durch
 Hintergrundflächen. Angezeigt wird nur, was zum Navigieren nötig ist.
 
 **Warum:** Panels verdecken die See. Das Spiel besteht daraus, den Horizont zu beobachten.
 
-### A7. Systeme sichtbar machen, nicht erklären
+### A8. Systeme sichtbar machen, nicht erklären
 
 Der rote Sperrsektor im Kompass ist das Vorbild: Er zeigt ohne ein Wort, wohin man nicht
 segeln kann. Wo eine Regel des Spiels wichtig ist, bekommt sie eine Anzeige — kein
@@ -71,7 +87,7 @@ Tutorial-Fenster.
 
 Folgt aus dem Design-Pillar *Lesbare Systeme* (siehe `KONZEPT.md`).
 
-### A8. Atmosphäre statt Sichtbegrenzung
+### A9. Atmosphäre statt Sichtbegrenzung
 
 Dunst färbt Entferntes blaugrau und gibt Tiefe. Er ist nicht dazu da, Renderweiten zu
 verstecken.
@@ -142,6 +158,10 @@ die Differenz nutzt — aber Kompass, Seekarte und Startausrichtung zeigten spie
 und das Schiff startete mit Blick aufs offene Meer statt auf die Küste. Wird automatisch
 geprüft.
 
+Nicht jede Drehung um die Hochachse ist ein Kurs: Ein Haus steht schräg, es fährt nicht.
+Solche Zeilen tragen `# kein Kurs` und behaupten die Ausnahme damit ausdrücklich — die
+Prüfung akzeptiert nur diesen Vermerk, kein stilles Übergehen.
+
 ### B8. Zwei Godot-Fallen, die niemand sieht
 
 **Vertex-Farben sind linear, nicht sRGB.** Godot 4 interpretiert Farben in Mesh-Arrays als
@@ -168,13 +188,34 @@ Erst das Abschalten des Cullings als *einzelne* Prüfung zeigte die Ursache. Die
 Steilheitskurve, die zwischenzeitlich gegen ein Symptom eingeführt wurde, steht jetzt
 auf einem milden Wert — mit 5,0 erzeugte sie Klippen rund um jede Insel.
 
-### B10. Kommentare erklären das Warum
+### B10. Was auf dem Gelände steht, fragt die gezeichnete Fläche
+
+`elevation_at()` liefert die *mathematische* Höhe. Das Mesh zeigt aber die geraden Flächen
+zwischen den Gitterpunkten, und die liegen acht Meter auseinander. Wer etwas auf den Boden
+setzt, benutzt `WorldData.terrain_surface_y()` — nie die Höhenfunktion.
+
+**Warum:** Die Häuser der ersten Siedlung schwebten über dem Hang, während die
+Fahnenstange daneben im Boden steckte. Beide standen auf der richtigen mathematischen
+Höhe. An einer steilen Küste weichen Funktion und gezeichnete Fläche um mehrere Meter
+voneinander ab, mal nach oben, mal nach unten. Wird automatisch geprüft — der Test liest
+die Dreiecke aus dem fertigen Mesh und vergleicht sie mit der Aufsetzfunktion.
+
+### B11. Wer versetzt, versetzt alles mit
+
+Wird ein Objekt gesetzt statt bewegt — Kampagnenstart, Auslaufen aus einem Hafen —, muss
+alles, was ihm träge folgt, mitgesetzt werden. Die Verfolgerkamera hat dafür `snap()`.
+
+**Warum:** Sonst flog die Kamera aus dem Weltmittelpunkt quer über die Karibik hinter dem
+Schiff her und stand dabei sekundenlang irgendwo im Nirgendwo. Im Bild sah es aus, als
+wäre die Kamera kaputt — tatsächlich tat sie genau, was ihr aufgetragen war.
+
+### B12. Kommentare erklären das Warum
 
 Was der Code tut, steht im Code. Kommentare begründen Entscheidungen, nennen
 Größenordnungen und warnen vor Fallen. Jede Konstante, deren Wert nicht offensichtlich
 ist, bekommt einen Satz dazu.
 
-### B11. Sprache
+### B13. Sprache
 
 | Wo | Sprache |
 |---|---|
@@ -207,8 +248,15 @@ nicht auf. Deshalb gibt es zwei Sichtprüfungen, die wirklich rendern:
 
 | Werkzeug | Zweck |
 |---|---|
-| `tests/capture_sailing.tscn` | Segelmodus, vier Aufnahmen, dazu Bildrate und Chunk-Zahl |
+| `tests/capture_sailing.tscn` | Segelmodus, fünf Aufnahmen, dazu Bildrate und Chunk-Zahl |
 | `tests/capture_ship.tscn` | Schiffsmodell aus vier festen Winkeln, ruhige Wasserlinie |
+| `tests/capture_island.tscn` | Küste vier Mal: normal, ohne Dunst, ohne Wasser, Drahtgitter |
+| `tests/capture_town.tscn` | Siedlung aus drei Abständen — steht sie auf dem Hang oder darüber? |
+| `tests/capture_port.tscn` | Hafenbildschirm: Markt, nach einem Kauf, Werft |
+
+Der Hafen ist reine Oberfläche und wäre der erste Kandidat, den man „kann man ja lesen"
+überspringt. Genau dort fielen Spaltenbreiten, ein rechtsbündiger Knopf und zwölf zu
+laute rote Zahlen auf.
 
 ### C3. Die Godot-Ausgabe wird gelesen, nicht gefiltert
 
@@ -236,17 +284,30 @@ durch Probieren. Performance wird beziffert, nicht geschätzt.
 `_check_code_conventions()` im Rauchtest durchsucht `autoload/`, `data/`, `world/`,
 `ui/`, `entities/` und `modes/` nach Regelverstößen:
 
-- **A3** — kein `Color(...)` außerhalb von `palette.gd`
-- **B7** — kein `rotation.y` außerhalb von `ship.gd`
+- **A3** — kein `Color(...)` außerhalb von `palette.gd`, kein `theme_override_colors/`
+  in einer `.tscn`
+- **B7** — kein `rotation.y` außerhalb von `ship.gd`, außer mit dem Vermerk `# kein Kurs`
 - **B9** — das Geländematerial rendert beidseitig und nutzt Vertex-Farben
+- **B10** — die Aufsetzhöhe trifft das gezeichnete Mesh auf den Millimeter
 
 Dazu prüft `_check_everything_loads()`, dass jedes Skript kompiliert und jede Szene ihre
 Skripte behält. `load()` liefert bei einem Parse-Fehler trotzdem ein Objekt zurück — es
 ist nur nicht kompiliert; `can_instantiate()` unterscheidet das.
 
-Beide Regeln stehen hier, weil ihre Verletzung im laufenden Spiel *nicht auffällt*: Eine
+Diese Regeln stehen hier, weil ihre Verletzung im laufenden Spiel *nicht auffällt*: Eine
 falsche Farbe sieht nur etwas anders aus, ein direkt gelesenes `rotation.y` liefert einen
 plausiblen, aber gespiegelten Winkel. Genau solche Fehler gehören in einen Linter.
+
+### C6. Die Abnahmebedingung wird gefahren, nicht behauptet
+
+Jeder Meilenstein hat eine Bedingung, an der er als fertig gilt. Die wird als Test
+ausgeführt — mit denselben Funktionen, die auch der Spieler auslöst.
+
+Für M3 heißt sie „günstig kaufen, woanders teuer verkaufen, das Schiff reparieren". Der
+Rauchtest sucht dafür den billigsten und den teuersten Hafen für eine Ware, kauft dort,
+verkauft hier und prüft, dass die Fahrt Gewinn abwirft — und dass dieselbe Fahrt
+rückwärts Verlust macht. Ohne den zweiten Teil wäre auch eine Wirtschaft bestanden, in
+der jede Richtung gleich viel bringt.
 
 ---
 

@@ -63,7 +63,24 @@ func _ready() -> void:
 	var sample: TownData = WorldData.towns[0] if not WorldData.towns.is_empty() else null
 	if sample != null:
 		print("\n  Beispielstadt %s:" % sample.town_name)
-		print("    Produktion: %s" % str(sample.production))
-		print("    Bedarf:     %s" % str(sample.demand))
+		print("    Produktion: %s" % _goods(sample.production))
+		print("    Bedarf:     %s" % _goods(sample.demand))
+		print("\n  Preise dort (Kauf/Verkauf, * = Eigenerzeugnis):")
+		for cargo: CargoType in CargoRegistry.all():
+			print("    %-14s %4d / %4d   Lager %5.0f%s" % [
+				cargo.display_name,
+				sample.buy_price(cargo),
+				sample.sell_price(cargo),
+				sample.stock_of(cargo.id),
+				"  *" if sample.is_producer(cargo.id) else "",
+			])
 
 	get_tree().quit(0)
+
+
+## Waren-Ids in lesbare Namen mit Mengen.
+func _goods(source: Dictionary) -> String:
+	var parts: Array[String] = []
+	for cargo_id: StringName in source:
+		parts.append("%s %d" % [CargoRegistry.display_name(cargo_id), int(source[cargo_id])])
+	return ", ".join(parts) if not parts.is_empty() else "-"

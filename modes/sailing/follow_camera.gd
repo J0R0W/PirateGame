@@ -32,9 +32,21 @@ var _distance: float = 22.0
 
 func _ready() -> void:
 	_distance = distance
-	if target != null:
-		_yaw = _target_heading()
-		global_position = _desired_position()
+	snap()
+
+
+## Setzt die Kamera ohne Uebergang hinter das Ziel.
+##
+## Noetig, wenn das Schiff versetzt wird statt zu fahren - beim Auslaufen aus
+## einem Hafen zum Beispiel. Ohne das flog die Kamera aus dem Weltmittelpunkt
+## quer ueber die Karibik hinterher und stand dabei sekundenlang irgendwo im
+## Nirgendwo.
+func snap() -> void:
+	if target == null:
+		return
+	_yaw = _target_heading()
+	global_position = _desired_position()
+	look_at(target.global_position + Vector3.UP * look_height)
 
 
 func _unhandled_input(event: InputEvent) -> void:

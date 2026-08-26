@@ -38,14 +38,10 @@ var max_towns: int = 40
 ## Kantenlaenge eines Gelaende-Chunks in Metern. Bei 64 m waeren fuer die
 ## Sichtweite ueber 250 Chunks noetig - mit 256 m sind es unter 50.
 const TERRAIN_CHUNK_SIZE: float = 256.0
+## Quads je Chunk-Kante. Bestimmt das Gitter, auf dem das Gelaende gezeichnet
+## wird - und damit auch, wo Haeuser stehen. Siehe TerrainChunk.surface_y.
+const TERRAIN_RESOLUTION: int = 32
 
-## Handelsgueter. Werden in M3 zu echten CargoType-Resources.
-const RAW_GOODS: PackedStringArray = [
-	"Zucker", "Tabak", "Kakao", "Kaffee", "Baumwolle", "Holz", "Gewürze",
-]
-const FINISHED_GOODS: PackedStringArray = [
-	"Rum", "Stoffe", "Werkzeug", "Kanonen", "Lebensmittel",
-]
 
 var rng := RandomNumberGenerator.new()
 var noise := FastNoiseLite.new()
@@ -92,6 +88,7 @@ func generate(world_seed: int, size: float, nation_list: Array[NationData]) -> v
 	_calibrate_sea_level()
 	_scan_landmasses()
 	_place_towns()
+	_build_terraces()
 	_assign_nations()
 	_name_towns()
 	_assign_economy()
@@ -124,11 +121,12 @@ func _build_noise(world_seed: int) -> void:
 	edge_noise.fractal_octaves = 2
 
 
-## Gelaendehoehe an einem Weltpunkt, 0.0 bis 1.0. Ueber [constant SEA_LEVEL]
+## Gelaendehoehe an einem Weltpunkt, 0.0 bis 1.0. Ueber [member sea_level]
 ## ist Land.
 func height_at(x: float, z: float) -> float:
 	var n := noise.get_noise_2d(x, z) * 0.5 + 0.5
-	return clampf(n * _falloff(x, z), 0.0, 1.0)
+	var height := clampf(n * _falloff(x, z), 0.0, 1.0)
+	return _terrace(x, z, height)
 
 
 func is_land(x: float, z: float) -> bool:
@@ -308,6 +306,49 @@ func _build_chunk_map(height: PackedFloat32Array) -> void:
 
 
 ## Weltposition -> Chunk-Koordinate.
+# --- Ankerplaetze -----------------------------------------------------------
+
+## Radien der Ringsuche in Metern.
+const ANCHOR_MIN_RADIUS: float = 155.0
+const ANCHOR_RADIUS_STEP: float = 40.0
+const ANCHOR_RINGS: int = 16
+## Winkelabweichungen von der seewaertigen Richtung, in Grad.
+const ANCHOR_OFFSETS: PackedFloat32Array = [
+	0.0, 25.0, -25.0, 50.0, -50.0, 75.0, -75.0, 100.0, -100.0,
+	125.0, -125.0, 150.0, -150.0, 180.0,
+]
+
+
+## Ein Ankerplatz vor einer Stadt: der naechstgelegene Punkt in offenem Wasser.
+##
+## Nicht einfach "vom Inselmittelpunkt weg": Bei langgestreckten Inseln zeigt
+## diese Richtung an der Kueste entlang statt aufs Meer, und das Schiff stand
+## beim Auslaufen im Berg. Deshalb eine Ringsuche - erst nah, dann weiter, und
+## in jedem Ring zuerst seewaerts, dann zunehmend daneben.
+func anchorage(town_position: Vector2, island_center: Vector2) -> Vector2:
+	var seaward := town_position - island_center
+	seaward = seaward.normalized() if seaward.length() > 1.0 else Vector2.RIGHT
+	var base_angle := atan2(seaward.y, seaward.x)
+
+	for ring in ANCHOR_RINGS:
+		var radius := ANCHOR_MIN_RADIUS + float(ring) * ANCHOR_RADIUS_STEP
+		for offset: float in ANCHOR_OFFSETS:
+			var angle := base_angle + deg_to_rad(offset)
+			var candidate := town_position + Vector2(cos(angle), sin(angle)) * radius
+			if is_navigable(candidate.x, candidate.y):
+				return candidate
+
+	# Sollte nicht vorkommen: Jede Stadt liegt per Konstruktion an tiefem
+	# Wasser. Lieber weit draussen als im Gelaende.
+	push_warning("WorldGenerator: kein Ankerplatz vor %v gefunden" % town_position)
+	return town_position + seaward * (ANCHOR_MIN_RADIUS + ANCHOR_RINGS * ANCHOR_RADIUS_STEP)
+
+
+## Wasser, das tief genug ist, um darin zu liegen.
+func is_navigable(x: float, z: float) -> bool:
+	return height_at(x, z) < deep_water
+
+
 func chunk_coord_at(x: float, z: float) -> Vector2i:
 	var half := world_size * 0.5
 	return Vector2i(
@@ -585,42 +626,129 @@ func _nation_by_id(nation_id: int) -> NationData:
 	return nations[0]
 
 
+# --- Stufe 6b: Terrassen ---------------------------------------------------
+
+## Radius, in dem eine Stadt das Gelaende einebnet.
+const TERRACE_RADIUS: float = 120.0
+## Innerhalb davon ist die Terrasse voellig eben.
+const TERRACE_CORE: float = 62.0
+## Wie hoch die Terrasse ueber dem Meeresspiegel liegt, in Hoeheneinheiten.
+##
+## Nach oben begrenzt, nicht nur nach unten: Eine Stadt liegt am Wasser. Ohne
+## Deckel uebernahm die Terrasse die Hoehe der Kueste, und Doerfer standen auf
+## Kliffs sechzig Meter ueber ihrem eigenen Hafen. Der Bereich entspricht bei
+## der ueblichen Ueberhoehung rund neun bis achtzehn Metern.
+const TERRACE_MIN_RISE: float = 0.0025
+const TERRACE_MAX_RISE: float = 0.0050
+## Kantenlaenge der Suchzellen. Muss groesser sein als TERRACE_RADIUS, sonst
+## reicht die Umgebung von drei mal drei Zellen nicht aus.
+const TERRACE_CELL: float = 256.0
+
+## Zelle -> Ids der Staedte darin. Ohne dieses Raster muesste jeder einzelne
+## Gelaendevertex gegen alle dreissig Staedte geprueft werden.
+var _terrace_grid: Dictionary = {}
+
+
+## Legt fest, auf welcher Hoehe jede Stadt liegt, und traegt sie ins Raster ein.
+##
+## Ohne diesen Schritt klebten die Haeuser an einem Steilhang: Die Kueste faellt
+## mit der Ueberhoehung so schnell ab, dass ein achsenparalleler Quader mit
+## einer Ecke meterweit in der Luft steht. Eine Hafenstadt hat einen flachen
+## Uferstreifen - hier wird er erzeugt.
+func _build_terraces() -> void:
+	_terrace_grid.clear()
+
+	# Erst alle Hoehen lesen, dann das Raster fuellen: Solange es leer ist,
+	# liefert height_at() den unveraenderten Untergrund - genau den wollen wir.
+	for town: TownData in towns:
+		town.terrace_height = clampf(
+			height_at(town.position.x, town.position.y),
+			sea_level + TERRACE_MIN_RISE,
+			sea_level + TERRACE_MAX_RISE
+		)
+
+	for town: TownData in towns:
+		var cell := _terrace_cell(town.position.x, town.position.y)
+		if not _terrace_grid.has(cell):
+			_terrace_grid[cell] = PackedInt32Array()
+		var ids: PackedInt32Array = _terrace_grid[cell]
+		ids.append(town.id)
+		_terrace_grid[cell] = ids
+
+
+## Zieht die Hoehe in Stadtnaehe auf die Terrasse.
+func _terrace(x: float, z: float, height: float) -> float:
+	if _terrace_grid.is_empty():
+		return height
+
+	var cell := _terrace_cell(x, z)
+	var here := Vector2(x, z)
+	for dz in range(-1, 2):
+		for dx in range(-1, 2):
+			var ids: PackedInt32Array = _terrace_grid.get(
+				cell + Vector2i(dx, dz), PackedInt32Array()
+			)
+			for id: int in ids:
+				var town: TownData = towns[id]
+				var distance := here.distance_to(town.position)
+				if distance >= TERRACE_RADIUS:
+					continue
+				# Innen ganz eben, nach aussen weich auslaufend.
+				var weight := 1.0 - smoothstep(TERRACE_CORE, TERRACE_RADIUS, distance)
+				height = lerpf(height, town.terrace_height, weight)
+	return height
+
+
+func _terrace_cell(x: float, z: float) -> Vector2i:
+	return Vector2i(floori(x / TERRACE_CELL), floori(z / TERRACE_CELL))
+
+
 # --- Stufe 7: Wirtschaft --------------------------------------------------
 
-## Produktion und Bedarf erzeugen das Preisgefaelle, aus dem in M3 die
-## Handelsrouten entstehen. Grundregel: Wer etwas herstellt, braucht es nicht.
+## Produktion und Bedarf erzeugen das Preisgefaelle, aus dem die Handelsrouten
+## entstehen. Grundregel: Wer etwas herstellt, braucht es nicht.
+##
+## Gespeichert werden nur Produktion und Bedarf pro Woche - der Preis selbst
+## faellt in TradeMath aus dem Lagerbestand. Die Liste der Waren kommt aus
+## CargoRegistry, damit es sie nur einmal gibt.
 func _assign_economy() -> void:
+	var raw := CargoRegistry.RAW_IDS
+	var finished := CargoRegistry.FINISHED_IDS
+
 	for town: TownData in towns:
 		town.production.clear()
 		town.demand.clear()
+		town.stock.clear()
 
-		var produced: Array[String] = []
+		var produced: Array[StringName] = []
 		var raw_count := 1 if town.size_tier == 0 else 2
 		for i in raw_count:
-			var good := RAW_GOODS[rng.randi() % RAW_GOODS.size()]
+			var good := raw[rng.randi() % raw.size()]
 			if good in produced:
 				continue
 			produced.append(good)
-			town.production[good] = rng.randi_range(8, 20) * (town.size_tier + 1)
+			town.production[good] = float(rng.randi_range(8, 20) * (town.size_tier + 1))
 
 		# Groessere Staedte verarbeiten zusaetzlich.
 		if town.size_tier >= 1:
-			var finished := FINISHED_GOODS[rng.randi() % FINISHED_GOODS.size()]
-			produced.append(finished)
-			town.production[finished] = rng.randi_range(5, 12) * town.size_tier
+			var refined := finished[rng.randi() % finished.size()]
+			produced.append(refined)
+			town.production[refined] = float(rng.randi_range(5, 12) * town.size_tier)
 
 		var wanted := 2 + town.size_tier
 		for i in wanted:
-			var pool := FINISHED_GOODS if rng.randf() > 0.4 else RAW_GOODS
+			var pool := finished if rng.randf() > 0.4 else raw
 			var good := pool[rng.randi() % pool.size()]
 			if good in produced or town.demand.has(good):
 				continue
-			town.demand[good] = rng.randi_range(6, 18) * (town.size_tier + 1)
+			town.demand[good] = float(rng.randi_range(6, 18) * (town.size_tier + 1))
 
-		# Startbestand: die Haelfte des Wochenbedarfs, damit Preise nicht bei
-		# null beginnen.
-		for good: String in town.demand:
-			town.stock[good] = int(town.demand[good] * 0.5)
+		# JEDE Ware bekommt einen Bestand, auch die weder erzeugten noch
+		# gebrauchten. Sonst haette eine Stadt fuer alles, was sie nicht
+		# kennt, ein leeres Lager - und ein leeres Lager heisst Hoechstpreis.
+		# Man haette Holz an jedes Dorf zum Doppelten verkaufen koennen.
+		for cargo_id: StringName in CargoRegistry.ids():
+			town.stock[cargo_id] = town.target_stock(cargo_id)
 
 
 func _shuffle(array: PackedInt32Array) -> void:

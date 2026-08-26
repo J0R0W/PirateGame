@@ -6,7 +6,9 @@ class_name Ship
 extends CharacterBody3D
 
 signal sail_setting_changed(step: int)
-signal ran_aground()
+## Aufgelaufen. Die Fahrt im Moment des Aufpralls entscheidet ueber den Schaden -
+## das Schiff selbst kennt weder Rumpfzustand noch Gold, das gehoert dem Modus.
+signal ran_aground(impact_speed: float)
 
 @export_group("Fahrverhalten")
 ## Knoten bei idealem Wind und voller Besegelung.
@@ -33,6 +35,10 @@ var sail_step: int = 2
 var helm: float = 0.0
 ## Sitzt das Schiff auf Grund?
 var aground: bool = false
+## Zustand der Besegelung, 0.0 bis 1.0. Zerschossene Segel ziehen weniger.
+## Setzt der Modus - beim Spieler aus GameState, bei KI-Schiffen aus deren
+## eigenem Zustand.
+var sail_condition: float = 1.0
 
 ## Rumpfmasse fuer das Abtasten der Wellen, in Metern.
 const HALF_LENGTH: float = 3.6
@@ -73,7 +79,7 @@ func _physics_process(delta: float) -> void:
 		heading(),
 		WorldData.wind_direction,
 		WorldData.wind_strength,
-		SailingMath.SAIL_STEPS[sail_step]
+		SailingMath.SAIL_STEPS[sail_step] * clampf(sail_condition, 0.0, 1.0)
 	)
 	speed = SailingMath.approach(speed, goal, speed_inertia, delta)
 
@@ -102,7 +108,7 @@ func _check_grounding(delta: float) -> void:
 
 	if not aground:
 		aground = true
-		ran_aground.emit()
+		ran_aground.emit(speed)
 	speed = 0.0
 	velocity = Vector3.ZERO
 

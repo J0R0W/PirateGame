@@ -37,6 +37,16 @@ const ROCK := Color(0.427, 0.400, 0.353)
 ## Gipfel.
 const PEAK := Color(0.788, 0.780, 0.757)
 
+# --- Siedlungen ------------------------------------------------------------
+## Gekalkte Mauern. Der hellste Ton an Land - eine Stadt soll sich schon von
+## See aus vom Bewuchs abheben.
+const WALL := Color(0.878, 0.855, 0.792)
+## Ziegeldächer. Bewusst gedämpfter als DANGER: Rot bedeutet im Spiel Gefahr,
+## und ein Dorf ist keine.
+const ROOF := Color(0.541, 0.286, 0.216)
+## Stege, Masten und Fahnenstangen an Land.
+const PIER := Color(0.361, 0.286, 0.212)
+
 # --- Schiff und Takelage ---------------------------------------------------
 const HULL := Color(0.243, 0.153, 0.110)
 const TIMBER := Color(0.561, 0.416, 0.259)
@@ -51,6 +61,10 @@ const HUD_DIM := Color(0.850, 0.900, 0.930, 0.80)
 const HUD_OUTLINE := Color(0.0, 0.0, 0.0, 0.75)
 ## Hintergrund von Karte und Menü.
 const BACKDROP := Color(0.031, 0.063, 0.094, 0.92)
+## Überschriften in Menü, Seekarte und Hafen - Pergament statt Weiß.
+const PARCHMENT := Color(0.914, 0.816, 0.561)
+## Nebensächliches in Menüs: Hinweise, abgeblendete Zeilen, Trennlinien.
+const MUTED := Color(0.506, 0.588, 0.651)
 
 ## Zustandsfarben. Getrennt vom Akzent, damit sie ihre Bedeutung behalten.
 const GOOD := Color(0.550, 0.780, 0.720)

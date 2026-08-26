@@ -10,6 +10,8 @@ var ship: Node3D
 @onready var _canvas: Control = %MapCanvas
 @onready var _title: Label = %MapTitle
 @onready var _legend: HBoxContainer = %Legend
+@onready var _backdrop: ColorRect = %Backdrop
+@onready var _hint: Label = %Hint
 
 var _texture: ImageTexture
 var _map_rect: Rect2
@@ -17,6 +19,9 @@ var _map_rect: Rect2
 
 func _ready() -> void:
 	visible = false
+	_backdrop.color = Palette.BACKDROP
+	_title.add_theme_color_override("font_color", Palette.PARCHMENT)
+	_hint.add_theme_color_override("font_color", Palette.MUTED)
 	_canvas.draw.connect(_draw_map)
 
 

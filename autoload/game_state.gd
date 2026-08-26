@@ -6,7 +6,15 @@ extends Node
 enum Nation { SPAIN, ENGLAND, FRANCE, NETHERLANDS }
 
 ## Spielminuten pro Realsekunde bei Zeitfaktor 1.
-const MINUTES_PER_SECOND: float = 2.0
+##
+## 6.0 heisst: ein Spieltag in vier Minuten Echtzeit. Vorher waren es zwoelf,
+## und zwischen zwei Haefen verging kaum ein halber Tag - die Lager der Staedte
+## hatten nie Zeit, sich zu erholen, und Handel bestand nur aus dem eigenen
+## Preisdruck.
+const MINUTES_PER_SECOND: float = 6.0
+
+## Startausruestung einer neuen Kampagne.
+const STARTING_SHIP: String = "res://resources/ships/sloop.tres"
 
 # --- Spieler ---
 var captain_name: String = "Namenlos"
@@ -33,6 +41,32 @@ var notoriety: int = 0:
 	set(value):
 		notoriety = clampi(value, 0, 100)
 		EventBus.notoriety_changed.emit(notoriety)
+
+# --- Schiff ---
+#
+# Das Schiff des Spielers lebt hier und nicht in der Segelszene: Laderaum und
+# Zustand muessen den Szenenwechsel in den Hafen ueberstehen. Die Szene erzeugt
+# nur die sichtbare Huelle und uebernimmt diese Werte.
+
+var ship_class: ShipClass = null
+
+## Rumpfzustand, 0 bis ship_class.max_hull.
+var hull: int = 100:
+	set(value):
+		hull = clampi(value, 0, max_hull())
+		EventBus.ship_condition_changed.emit(hull, sails)
+
+## Zustand der Besegelung. Beschaedigte Segel kosten Fahrt.
+var sails: int = 100:
+	set(value):
+		sails = clampi(value, 0, max_sails())
+		EventBus.ship_condition_changed.emit(hull, sails)
+
+## Laderaum: Waren-Id -> Menge. Nur Waren mit Menge > 0 stehen drin.
+var cargo: Dictionary = {}
+
+## Id der Stadt, in deren Hafen der Spieler liegt. -1 heisst: auf See.
+var current_port_id: int = -1
 
 # --- Zeit ---
 var game_minutes: float = 0.0
@@ -66,6 +100,65 @@ func add_gold(amount: int) -> void:
 	gold += amount
 
 
+# --- Schiff ---------------------------------------------------------------
+
+func max_hull() -> int:
+	return ship_class.max_hull if ship_class != null else 100
+
+
+func max_sails() -> int:
+	return ship_class.max_sails if ship_class != null else 100
+
+
+func cargo_capacity() -> int:
+	return ship_class.cargo_capacity if ship_class != null else 40
+
+
+## Belegter Laderaum. Sperrgut zaehlt mehrfach - siehe CargoType.unit_size.
+func cargo_used() -> int:
+	var used := 0
+	for cargo_id: StringName in cargo:
+		var type := CargoRegistry.get_cargo(cargo_id)
+		used += int(cargo[cargo_id]) * (type.unit_size if type != null else 1)
+	return used
+
+
+func cargo_free() -> int:
+	return maxi(cargo_capacity() - cargo_used(), 0)
+
+
+func cargo_of(cargo_id: StringName) -> int:
+	return int(cargo.get(cargo_id, 0))
+
+
+func add_cargo(cargo_id: StringName, amount: int) -> void:
+	var total := cargo_of(cargo_id) + amount
+	if total <= 0:
+		cargo.erase(cargo_id)
+	else:
+		cargo[cargo_id] = total
+	EventBus.cargo_changed.emit(cargo_id, maxi(total, 0))
+
+
+## Schaden am Rumpf. Kommt vorerst nur vom Auflaufen, spaeter vom Gefecht.
+func damage_hull(amount: int) -> void:
+	if amount <= 0:
+		return
+	hull = hull - amount
+
+
+func damage_sails(amount: int) -> void:
+	if amount <= 0:
+		return
+	sails = sails - amount
+
+
+## Wie gut die Segel noch ziehen, 0.0 bis 1.0.
+func sail_condition() -> float:
+	var maximum := max_sails()
+	return float(sails) / float(maximum) if maximum > 0 else 0.0
+
+
 func change_reputation(nation: Nation, amount: int) -> void:
 	reputation[nation] = clampi(reputation[nation] + amount, -100, 100)
 	EventBus.reputation_changed.emit(nation, reputation[nation])
@@ -85,4 +178,13 @@ func new_campaign(captain: String, world_seed: int) -> void:
 	_last_day = 0
 	for nation in reputation:
 		reputation[nation] = 0
+
+	ship_class = load(STARTING_SHIP)
+	if ship_class == null:
+		push_error("GameState: Startschiff nicht ladbar: %s" % STARTING_SHIP)
+	hull = max_hull()
+	sails = max_sails()
+	cargo.clear()
+	current_port_id = -1
+
 	WorldData.generate(world_seed)
