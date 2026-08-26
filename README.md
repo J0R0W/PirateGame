@@ -9,6 +9,7 @@ Als Nächstes M3: Andocken und der erste Hafen.
 ## Dokumentation
 
 - [Projektkonzept](docs/KONZEPT.md) — Vision, Gameplay-Systeme, technische Architektur, Roadmap
+- [Richtlinien](docs/RICHTLINIEN.md) — verbindliche Regeln für Gestaltung und Code
 
 ## Starten
 
@@ -69,46 +70,19 @@ Städte je Nation, Beispielwirtschaft. Zum Justieren der Generator-Parameter.
 | `ui/` | HUD, Seekarte, Hafenbildschirme, Theme |
 | `tests/` | Rauchtests |
 
-## Architekturregeln
+## Regeln
 
-**Modus-Szenen kennen einander nie direkt.** Kommunikation läuft über `GameState`
-(Zustand) und `EventBus` (Signale); Szenenwechsel ausschließlich über `SceneRouter`.
+Verbindlich in [docs/RICHTLINIEN.md](docs/RICHTLINIEN.md). Die wichtigsten:
 
-**Die Winkelkonvention ist Navigation, nicht Godot.** `heading()` liefert
-0 = Nord, 90° = Ost. Godots `rotation.y` dreht genau andersherum. Die Umrechnung
-steht ausschließlich in `Ship.heading()` und `Ship.set_heading()` — nirgends
-sonst direkt auf `rotation.y` rechnen. Für Richtungsvektoren gibt es
-`SailingMath.direction()` und `angle_of()`.
+- **Modus-Szenen kennen einander nie** — Kommunikation über `GameState` und `EventBus`,
+  Szenenwechsel über `SceneRouter`.
+- **Alle Farben aus `data/palette.gd`** — kein `Color(...)` im übrigen Code.
+- **Kurse sind Navigationswinkel** — `heading()` statt `rotation.y`.
+- **Vertex-Farben sind linear** — `Palette.for_vertex()` benutzen.
+- **Die Wellenformel existiert doppelt** — `OceanWaves` und `ocean.gdshader` müssen
+  synchron bleiben, sonst schwebt das Schiff über der sichtbaren See.
 
-**Vertex-Farben sind linear, nicht sRGB.** Godot 4 interpretiert Farben in
-Mesh-Arrays als linear. Wer eine sRGB-Palette hinschreibt, bekommt ausgewaschene
-Ergebnisse — die Inseln sahen aus wie Schneefelder. `srgb_to_linear()` gehört
-an jede Vertex-Farbe.
-
-**Transform-Basen stehen in `.tscn` zeilenweise.** Eine spaltenweise gerechnete
-Rotationsmatrix landet transponiert in der Szene — und die Transponierte einer
-Rotation ist ihre *Umkehrung*. So zeigte der Klüverbaum nach unten statt nach
-oben. Wer eine gedrehte Transform von Hand einträgt, prüft sie mit
-`tests/capture_ship.tscn` nach; `_check_ship_model()` im Rauchtest fängt den
-Fall inzwischen ab.
-
-**Der Meeresspiegel steht nicht fest, er wird kalibriert.** `WorldGenerator`
-tastet die Höhenverteilung ab und legt `sea_level` auf das Perzentil, das
-`TARGET_LAND_SHARE` trifft. Deshalb liefert *jeder* Seed eine brauchbare Karibik
-statt mal einen leeren Ozean und mal einen Kontinent. Wer den Landanteil ändern
-will, ändert die Zielgröße — nie den Meeresspiegel direkt.
-
-**Die Heightmap wird nie gespeichert.** `WorldGenerator.height_at()` ist die
-maßgebliche, kontinuierliche Quelle und jederzeit an beliebiger Stelle
-auswertbar. Das Analyse-Raster (512²) dient nur dazu, Inseln und Häfen zu
-*finden*; das Terrain-Meshing sampelt später direkt die Funktion.
-
-**Die Wellenformel existiert doppelt und muss synchron bleiben.** `OceanWaves`
-(GDScript) und `ocean.gdshader` berechnen dieselbe Wasserhöhe — der Shader zeichnet
-die See, das Schiff reitet darauf. Wird eine Konstante geändert, muss die andere
-Seite mitgezogen werden, sonst schwebt oder versinkt das Schiff. Beide teilen sich
-auch die Uhr: `ocean.gd` reicht `OceanWaves.time_now()` als Uniform weiter, statt
-im Shader `TIME` zu benutzen.
+Die ersten drei prüft der Rauchtest automatisch.
 
 ## Steuerung
 

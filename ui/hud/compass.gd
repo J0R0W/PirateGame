@@ -7,13 +7,13 @@ extends Control
 
 const RADIUS: float = 62.0
 
-const COL_RING   := Color(0.85, 0.90, 0.93, 0.55)
-const COL_TICK   := Color(0.85, 0.90, 0.93, 0.35)
-const COL_TEXT   := Color(0.88, 0.93, 0.96, 0.85)
-const COL_WIND   := Color(0.78, 0.57, 0.19)
-const COL_NOGO   := Color(0.66, 0.26, 0.18, 0.30)
-const COL_SHIP   := Color(0.93, 0.95, 0.97)
-const COL_NORTH  := Color(0.66, 0.26, 0.18)
+const COL_RING := Palette.fade(Palette.HUD_DIM, 0.55)
+const COL_TICK := Palette.fade(Palette.HUD_DIM, 0.35)
+const COL_TEXT := Palette.fade(Palette.HUD_TEXT, 0.85)
+const COL_WIND := Palette.BRASS
+const COL_NOGO := Palette.fade(Palette.DANGER, 0.30)
+const COL_SHIP := Palette.HUD_TEXT
+const COL_NORTH := Palette.DANGER
 
 var ship: Ship
 

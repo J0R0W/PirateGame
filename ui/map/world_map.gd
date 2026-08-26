@@ -69,7 +69,7 @@ func _draw_map() -> void:
 		Vector2(side, side)
 	)
 	_canvas.draw_texture_rect(_texture, _map_rect, false)
-	_canvas.draw_rect(_map_rect, Color(0.85, 0.90, 0.93, 0.35), false, 1.0)
+	_canvas.draw_rect(_map_rect, Palette.fade(Palette.HUD_DIM, 0.35), false, 1.0)
 
 	_draw_towns()
 	_draw_ship()
@@ -84,7 +84,7 @@ func _draw_towns() -> void:
 
 		# Hauptstaedte groesser, Doerfer als kleine Punkte.
 		var radius := 3.0 + float(town.size_tier) * 2.0
-		_canvas.draw_circle(point, radius + 1.5, Color(0.05, 0.09, 0.13, 0.8))
+		_canvas.draw_circle(point, radius + 1.5, Palette.fade(Palette.BACKDROP, 0.8))
 		_canvas.draw_circle(point, radius, color)
 
 		# Nur Staedte und Hauptstaedte beschriften - sonst wird es unleserlich.
@@ -92,11 +92,11 @@ func _draw_towns() -> void:
 			var offset := Vector2(radius + 4.0, 4.0)
 			_canvas.draw_string_outline(
 				font, point + offset, town.town_name,
-				HORIZONTAL_ALIGNMENT_LEFT, -1, 12, 4, Color(0.05, 0.09, 0.13, 0.9)
+				HORIZONTAL_ALIGNMENT_LEFT, -1, 12, 4, Palette.fade(Palette.BACKDROP, 0.9)
 			)
 			_canvas.draw_string(
 				font, point + offset, town.town_name,
-				HORIZONTAL_ALIGNMENT_LEFT, -1, 12, Color(0.93, 0.95, 0.97)
+				HORIZONTAL_ALIGNMENT_LEFT, -1, 12, Palette.HUD_TEXT
 			)
 
 
@@ -113,9 +113,9 @@ func _draw_ship() -> void:
 	var right := point + SailingMath.direction(heading - 2.4) * 6.0
 
 	_canvas.draw_colored_polygon(
-		PackedVector2Array([tip, left, point, right]), Color(0.98, 0.98, 0.98)
+		PackedVector2Array([tip, left, point, right]), Palette.HUD_TEXT
 	)
-	_canvas.draw_arc(point, 12.0, 0.0, TAU, 24, Color(0.98, 0.98, 0.98, 0.5), 1.0, true)
+	_canvas.draw_arc(point, 12.0, 0.0, TAU, 24, Palette.fade(Palette.HUD_TEXT, 0.5), 1.0, true)
 
 
 ## Weltkoordinaten (Meter, zentriert um 0) auf Kartenpixel.

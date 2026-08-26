@@ -24,6 +24,8 @@ extends Node3D
 @export var max_distance: float = 55.0
 @export var zoom_step: float = 3.0
 
+## Kurs, dem die Kamera gerade folgt - als Navigationswinkel, nicht als
+## Godot-Rotation. Siehe docs/RICHTLINIEN.md.
 var _yaw: float = 0.0
 var _distance: float = 22.0
 
@@ -31,7 +33,7 @@ var _distance: float = 22.0
 func _ready() -> void:
 	_distance = distance
 	if target != null:
-		_yaw = target.rotation.y
+		_yaw = _target_heading()
 		global_position = _desired_position()
 
 
@@ -46,7 +48,7 @@ func _unhandled_input(event: InputEvent) -> void:
 func _process(delta: float) -> void:
 	if target == null:
 		return
-	_yaw = lerp_angle(_yaw, target.rotation.y, 1.0 - exp(-delta * turn_speed))
+	_yaw = lerp_angle(_yaw, _target_heading(), 1.0 - exp(-delta * turn_speed))
 	global_position = global_position.lerp(
 		_desired_position(), 1.0 - exp(-delta * follow_speed)
 	)
@@ -57,8 +59,15 @@ func _zoom(amount: float) -> void:
 	_distance = clampf(_distance + amount, min_distance, max_distance)
 
 
+## Kurs des Ziels aus seinem Vorwaertsvektor - funktioniert fuer jeden Node3D,
+## ohne dessen Rotation direkt zu lesen.
+func _target_heading() -> float:
+	var forward := -target.global_basis.z
+	return SailingMath.angle_of(Vector2(forward.x, forward.z))
+
+
 func _desired_position() -> Vector3:
-	# Vorwaerts ist -Z, die Kamera steht also bei +Z hinter dem Schiff.
-	var back := Vector3(0.0, 0.0, _distance).rotated(Vector3.UP, _yaw)
+	# Die Kamera steht hinter dem Ziel, also entgegen seiner Fahrtrichtung.
+	var astern := -SailingMath.direction(_yaw) * _distance
 	var lift := Vector3.UP * (height * (_distance / distance))
-	return target.global_position + back + lift
+	return target.global_position + Vector3(astern.x, 0.0, astern.y) + lift

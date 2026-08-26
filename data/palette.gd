@@ -1,0 +1,83 @@
+## Die Farbpalette des Spiels - eine Quelle für alles Sichtbare.
+##
+## Regel: Keine Farbe wird irgendwo im Code direkt hingeschrieben. Wer eine
+## braucht, holt sie hier. Vorher lagen dieselben Töne in sechs Dateien, teils
+## leicht verschieden - Karte und Gelände zeigten unterschiedliches Grün für
+## dieselbe Wiese.
+##
+## Ausnahme sind die Nationsfarben: Die stehen in resources/nations/*.tres,
+## weil sie Spieldaten sind und nicht Gestaltung. Zur Übersicht unten notiert.
+##
+## Alle Werte sind sRGB. Für Vertex-Farben in Meshes IMMER [method for_vertex]
+## benutzen - Godot 4 interpretiert Mesh-Farben als linear.
+class_name Palette
+extends RefCounted
+
+# --- Die See ---------------------------------------------------------------
+## Offene See, tiefstes Blau.
+const DEEP_SEA := Color(0.043, 0.114, 0.196)
+## Küstennahes Wasser.
+const SHALLOW_SEA := Color(0.129, 0.353, 0.463)
+## Untiefen und Riffe, der hellste Wasserton.
+const SHOAL := Color(0.290, 0.549, 0.596)
+## Meeresboden. Ohne eigenen Ton leuchtet Sand durch die Wellentäler.
+const SEABED := Color(0.094, 0.243, 0.302)
+## Schaumkronen.
+const FOAM := Color(0.550, 0.780, 0.840)
+
+# --- Das Land --------------------------------------------------------------
+## Strand und Dünen.
+const SAND := Color(0.847, 0.792, 0.616)
+## Bewachsene Niederungen.
+const GRASS := Color(0.325, 0.451, 0.286)
+## Trockener Bewuchs an den Hängen.
+const SCRUB := Color(0.451, 0.478, 0.298)
+## Kahler Fels.
+const ROCK := Color(0.427, 0.400, 0.353)
+## Gipfel.
+const PEAK := Color(0.788, 0.780, 0.757)
+
+# --- Schiff und Takelage ---------------------------------------------------
+const HULL := Color(0.243, 0.153, 0.110)
+const TIMBER := Color(0.561, 0.416, 0.259)
+const CANVAS := Color(0.914, 0.894, 0.827)
+
+# --- Anzeigen --------------------------------------------------------------
+## Fließtext und Zahlen im HUD.
+const HUD_TEXT := Color(0.880, 0.930, 0.960)
+## Nebensächliches, Beschriftungen.
+const HUD_DIM := Color(0.850, 0.900, 0.930, 0.80)
+## Umrandung hinter Text - das HUD trägt keine Kästen, nur Konturen.
+const HUD_OUTLINE := Color(0.0, 0.0, 0.0, 0.75)
+## Hintergrund von Karte und Menü.
+const BACKDROP := Color(0.031, 0.063, 0.094, 0.92)
+
+## Zustandsfarben. Getrennt vom Akzent, damit sie ihre Bedeutung behalten.
+const GOOD := Color(0.550, 0.780, 0.720)
+const FAIR := Color(0.850, 0.760, 0.450)
+const BAD := Color(0.850, 0.450, 0.360)
+
+## Der Akzent des Spiels: Wind, Gold, alles Nautische.
+const BRASS := Color(0.780, 0.570, 0.190)
+## Warnungen, Sperrsektor, Norden auf dem Kompass.
+const DANGER := Color(0.660, 0.260, 0.180)
+
+# --- Nationen (Quelle: resources/nations/*.tres) ----------------------------
+# Spanien      0.831, 0.627, 0.090   Gold
+# England      0.690, 0.227, 0.180   Rot
+# Frankreich   0.180, 0.373, 0.639   Blau
+# Niederlande  0.851, 0.467, 0.024   Orange
+
+
+## Wandelt eine Palettenfarbe für die Verwendung als Vertex-Farbe um.
+##
+## Godot 4 interpretiert Farben in Mesh-Arrays als linear, nicht als sRGB.
+## Ohne diese Umrechnung wirkt alles ausgewaschen - die Inseln sahen aus wie
+## Schneefelder.
+static func for_vertex(color: Color) -> Color:
+	return color.srgb_to_linear()
+
+
+## Farbe mit anderer Deckkraft, ohne die Konstante zu kopieren.
+static func fade(color: Color, alpha: float) -> Color:
+	return Color(color.r, color.g, color.b, alpha)

@@ -13,9 +13,9 @@ var ship: Ship
 @onready var _wind: Label = %Wind
 @onready var _clock: Label = %Clock
 
-const COL_GOOD := Color(0.55, 0.78, 0.72)
-const COL_FAIR := Color(0.85, 0.76, 0.45)
-const COL_BAD  := Color(0.85, 0.45, 0.36)
+const COL_GOOD := Palette.GOOD
+const COL_FAIR := Palette.FAIR
+const COL_BAD := Palette.BAD
 
 
 func setup(target: Ship) -> void:

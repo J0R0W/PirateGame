@@ -24,6 +24,7 @@ func _ready() -> void:
 	_check_ship_model()
 	_check_heading_convention()
 	await _check_terrain()
+	_check_code_conventions()
 
 	print("=== %s ===" % ("BESTANDEN" if _failures == 0 else "%d FEHLER" % _failures))
 	get_tree().quit(1 if _failures > 0 else 0)
@@ -335,6 +336,75 @@ func _check_world_generation() -> void:
 		if h < 0.0 or h > 1.0 or is_nan(h):
 			in_range = false
 	_assert(in_range, "Hoehenfunktion bleibt in 0 bis 1")
+
+
+## Setzt die Projektregeln durch, die durch Fehler gelernt wurden.
+##
+## Beide Regeln unten stehen hier, weil ihre Verletzung im Spiel nicht auffaellt:
+## Eine falsche Farbe sieht nur etwas anders aus, ein direkt gelesenes
+## rotation.y liefert einen plausiblen, aber gespiegelten Winkel. Siehe
+## docs/RICHTLINIEN.md.
+const CODE_DIRS: PackedStringArray = ["autoload", "data", "world", "ui", "entities", "modes"]
+
+func _check_code_conventions() -> void:
+	var color_offenders: Array[String] = []
+	var rotation_offenders: Array[String] = []
+
+	for path: String in _gd_files():
+		var file := FileAccess.open(path, FileAccess.READ)
+		if file == null:
+			continue
+		var lines := file.get_as_text().split("\n")
+		file.close()
+
+		var basename := path.get_file()
+		for i in lines.size():
+			var line: String = lines[i]
+			var code := line.strip_edges()
+			if code.begins_with("#"):
+				continue
+
+			# Regel: Farben kommen aus der Palette.
+			if basename != "palette.gd" and code.contains("Color("):
+				# Vollstaendig transparent ist kein Farbton, sondern "unsichtbar".
+				if not code.contains("Color(0, 0, 0, 0)"):
+					color_offenders.append("%s:%d" % [path, i + 1])
+
+			# Regel: Kurse laufen ueber heading(), nicht ueber rotation.y.
+			if basename != "ship.gd" and code.contains("rotation.y"):
+				rotation_offenders.append("%s:%d" % [path, i + 1])
+
+	_assert(color_offenders.is_empty(),
+		"Keine Farbliterale ausserhalb der Palette%s" % _offenders(color_offenders))
+	_assert(rotation_offenders.is_empty(),
+		"Kurse laufen ueber heading(), nicht ueber rotation.y%s" % _offenders(rotation_offenders))
+
+
+func _gd_files() -> PackedStringArray:
+	var found := PackedStringArray()
+	for directory: String in CODE_DIRS:
+		_collect_gd("res://" + directory, found)
+	return found
+
+
+func _collect_gd(path: String, into: PackedStringArray) -> void:
+	var dir := DirAccess.open(path)
+	if dir == null:
+		return
+	dir.list_dir_begin()
+	var entry := dir.get_next()
+	while entry != "":
+		var full := path + "/" + entry
+		if dir.current_is_dir():
+			_collect_gd(full, into)
+		elif entry.ends_with(".gd"):
+			into.append(full)
+		entry = dir.get_next()
+	dir.list_dir_end()
+
+
+func _offenders(list: Array[String]) -> String:
+	return "" if list.is_empty() else "  -> " + ", ".join(list.slice(0, 4))
 
 
 ## Prueft Gelaende-Chunks und Grundberuehrung.

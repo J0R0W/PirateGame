@@ -7,14 +7,7 @@
 class_name TerrainChunk
 extends RefCounted
 
-const SAND := Color(0.847, 0.792, 0.616)
-const GRASS := Color(0.325, 0.451, 0.286)
-const SCRUB := Color(0.451, 0.478, 0.298)
-const ROCK := Color(0.427, 0.400, 0.353)
-const SNOW := Color(0.788, 0.780, 0.757)
-## Meeresboden. Ohne eigene Farbe leuchtet heller Sand durch die Wellentaeler
-## und sieht aus wie schwimmende Platten vor der Kueste.
-const SEABED := Color(0.094, 0.243, 0.302)
+# Farben kommen aus Palette - siehe data/palette.gd.
 
 ## Ab dieser Hoehe ueber dem Meeresspiegel beginnt der jeweilige Bewuchs.
 ## Passt zu WorldData.TERRAIN_HEIGHT_SCALE - wird die geaendert, wandern die
@@ -95,24 +88,22 @@ static func _normal_at(
 ## Farbe nach Hoehe. Die Uebergaenge sind weich, sonst entstehen harte Ringe
 ## rund um jede Insel.
 ##
-## Wichtig: Vertex-Farben werden in Godot 4 als LINEAR interpretiert, nicht als
-## sRGB. Ohne die Umrechnung wirkt das ganze Gelaende ausgewaschen - Inseln
-## sahen aus wie Schneefelder.
+## Vertex-Farben muessen linear sein - Palette.for_vertex() erledigt das.
 static func _tint(y: float) -> Color:
-	return _ramp(y).srgb_to_linear()
+	return Palette.for_vertex(_ramp(y))
 
 
 static func _ramp(y: float) -> Color:
 	if y < 0.0:
 		# Unter Wasser vom Strand ins Dunkle - das ergibt weiche Untiefen
 		# statt harter Kanten an der Kueste.
-		return SAND.lerp(SEABED, smoothstep(0.0, -22.0, y))
+		return Palette.SAND.lerp(Palette.SEABED, smoothstep(0.0, -22.0, y))
 	if y <= BEACH_TOP:
-		return SAND
+		return Palette.SAND
 	if y <= GRASS_TOP:
-		return SAND.lerp(GRASS, smoothstep(BEACH_TOP, GRASS_TOP, y))
+		return Palette.SAND.lerp(Palette.GRASS, smoothstep(BEACH_TOP, GRASS_TOP, y))
 	if y <= SCRUB_TOP:
-		return GRASS.lerp(SCRUB, smoothstep(GRASS_TOP, SCRUB_TOP, y))
+		return Palette.GRASS.lerp(Palette.SCRUB, smoothstep(GRASS_TOP, SCRUB_TOP, y))
 	if y <= ROCK_TOP:
-		return SCRUB.lerp(ROCK, smoothstep(SCRUB_TOP, ROCK_TOP, y))
-	return ROCK.lerp(SNOW, smoothstep(ROCK_TOP, ROCK_TOP + 160.0, y))
+		return Palette.SCRUB.lerp(Palette.ROCK, smoothstep(SCRUB_TOP, ROCK_TOP, y))
+	return Palette.ROCK.lerp(Palette.PEAK, smoothstep(ROCK_TOP, ROCK_TOP + 160.0, y))
