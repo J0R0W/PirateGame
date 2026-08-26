@@ -21,6 +21,7 @@ func _ready() -> void:
 	_check_sailing_math()
 	_check_ocean_waves()
 	_check_world_generation()
+	_check_ship_model()
 
 	print("=== %s ===" % ("BESTANDEN" if _failures == 0 else "%d FEHLER" % _failures))
 	get_tree().quit(1 if _failures > 0 else 0)
@@ -332,6 +333,65 @@ func _check_world_generation() -> void:
 		if h < 0.0 or h > 1.0 or is_nan(h):
 			in_range = false
 	_assert(in_range, "Hoehenfunktion bleibt in 0 bis 1")
+
+
+## Prueft die Geometrie des Schiffsmodells.
+##
+## Anlass: Der Kluederbaum zeigte nach unten und schwebte neben dem Rumpf.
+## Godot speichert die Basis in .tscn ZEILENWEISE - eine spaltenweise gerechnete
+## Rotationsmatrix landet transponiert in der Szene, also als inverse Drehung.
+## Von der Verfolgerkamera aus faellt so etwas kaum auf.
+func _check_ship_model() -> void:
+	var packed: PackedScene = load("res://entities/ship/ship.tscn")
+	var ship: Node3D = packed.instantiate()
+	ship.set("player_controlled", false)
+	add_child(ship)
+	ship.set_physics_process(false)
+
+	var bowsprit: Node3D = ship.get_node_or_null("Hull/Bowsprit")
+	_assert(bowsprit != null, "Kluederbaum vorhanden")
+	if bowsprit == null:
+		ship.queue_free()
+		return
+
+	# Die Zylinderachse ist die lokale y-Achse.
+	var axis: Vector3 = bowsprit.global_basis.y.normalized()
+	_assert(axis.z < -0.5, "Kluederbaum zeigt nach vorne")
+	_assert(axis.y > 0.1, "Kluederbaum zeigt nach oben, nicht ins Wasser")
+
+	var elevation := rad_to_deg(asin(clampf(axis.y, -1.0, 1.0)))
+	_assert(elevation > 10.0 and elevation < 35.0,
+		"Kluederbaum-Neigung plausibel (%.0f Grad)" % elevation)
+
+	# Fuss und Nock aus Achse und Meshlaenge.
+	var mesh: CylinderMesh = (bowsprit as MeshInstance3D).mesh
+	var half_length: float = mesh.height * 0.5
+	var foot: Vector3 = bowsprit.global_position - axis * half_length
+	var nock: Vector3 = bowsprit.global_position + axis * half_length
+
+	# Der Fuss muss im Rumpf stecken - genau das war der sichtbare Fehler.
+	var hull: MeshInstance3D = ship.get_node("Hull/HullMesh")
+	var hull_mesh: BoxMesh = hull.mesh
+	var hull_front: float = hull.global_position.z - hull_mesh.size.z * 0.5
+	var bow: MeshInstance3D = ship.get_node("Hull/Bow")
+	var bow_mesh: BoxMesh = bow.mesh
+	var bow_front: float = bow.global_position.z - bow_mesh.size.z * 0.5
+
+	_assert(foot.z > bow_front, "Kluederbaum steckt im Bug, statt davor zu schweben")
+	_assert(foot.y < hull.global_position.y + hull_mesh.size.y * 0.5 + 0.4,
+		"Kluederbaum-Fuss liegt nicht ueber dem Rumpf")
+	_assert(nock.z < bow_front, "Nock ragt vor den Bug hinaus")
+	_assert(nock.y > 1.0, "Nock liegt ueber der Wasserlinie")
+
+	# Segel muessen an der Rah haengen und mit der Stellung schrumpfen.
+	var sail: Node3D = ship.get_node_or_null("Hull/Mast/Sail")
+	_assert(sail != null, "Segel vorhanden")
+	if sail != null:
+		var spar: Node3D = ship.get_node("Hull/Mast/Spar")
+		_assert(absf(sail.global_position.y - spar.global_position.y) < 0.2,
+			"Segel haengt an der Rah")
+
+	ship.queue_free()
 
 
 func _assert(condition: bool, label: String) -> void:

@@ -44,9 +44,9 @@ size = Vector3(4.6, 0.14, 0.14)
 size = Vector3(4.2, 3.6, 0.08)
 
 [sub_resource type="CylinderMesh" id="Mesh_bowsprit"]
-top_radius = 0.06
-bottom_radius = 0.11
-height = 3.2
+top_radius = 0.07
+bottom_radius = 0.15
+height = 4.85
 radial_segments = 6
 rings = 1
 
@@ -72,7 +72,7 @@ mesh = SubResource("Mesh_bow")
 surface_material_override/0 = SubResource("Mat_hull")
 
 [node name="Bowsprit" type="MeshInstance3D" parent="Hull"]
-transform = Transform3D(1, 0, 0, 0, 0.258819, -0.965926, 0, 0.965926, 0.258819, 0, 1.05, -6.6)
+transform = Transform3D(1, 0, 0, 0, 0.319316, 0.947648, 0, -0.947648, 0.319316, 0, 1.075, -6.9)
 mesh = SubResource("Mesh_bowsprit")
 surface_material_override/0 = SubResource("Mat_wood")
 

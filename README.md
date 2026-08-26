@@ -3,7 +3,8 @@
 Ein Piraten-Sandbox-Spiel in der Tradition von *Sid Meier's Pirates!*, gebaut mit Godot 4.7.
 3D-Präsentation, prozedural erzeugte Karibik, eigene Systeme statt originalgetreuem Nachbau.
 
-**Status:** M2 — Weltgenerierung und Seekarte stehen. Als Nächstes 3D-Terrain mit Chunk-Streaming.
+**Status:** M1 abgenommen (Segeln fühlt sich gut an). M2 — Weltgenerierung und Seekarte stehen,
+als Nächstes 3D-Terrain mit Chunk-Streaming.
 
 ## Dokumentation
 
@@ -23,9 +24,9 @@ godot --path .
 godot --headless --path . res://tests/smoke_test.tscn
 ```
 
-91 Prüfungen: Autoloads, Eingabebelegung, Kampagnenstart, Speicher-Roundtrip,
-Segelmathematik, Wellenfeld und die komplette Weltgenerierung (Landanteil,
-Weltrand, Hafenabstände, Nationsbesitz, Wirtschaft, Determinismus).
+101 Prüfungen: Autoloads, Eingabebelegung, Kampagnenstart, Speicher-Roundtrip,
+Segelmathematik, Wellenfeld, Schiffsgeometrie und die komplette Weltgenerierung
+(Landanteil, Weltrand, Hafenabstände, Nationsbesitz, Wirtschaft, Determinismus).
 Exit-Code 0 = bestanden.
 
 ```bash
@@ -36,6 +37,14 @@ Sichtprüfung: rendert den Segelmodus und legt vier Aufnahmen unter
 `user://captures/` ab (Standardkurs, Wende, In Irons, Seekarte). Braucht ein
 echtes Fenster — der Ozean-Shader wird headless nie kompiliert und bliebe
 ungeprüft.
+
+```bash
+godot --path . res://tests/capture_ship.tscn
+```
+
+Zeigt das Schiffsmodell aus vier festen Winkeln vor ruhiger Wasserlinie. Im
+Segelmodus verdeckt die Verfolgerkamera genau die Details, die man beim
+Modellieren beurteilen muss.
 
 ```bash
 godot --headless --path . res://tests/world_report.tscn
@@ -61,6 +70,13 @@ Städte je Nation, Beispielwirtschaft. Zum Justieren der Generator-Parameter.
 
 **Modus-Szenen kennen einander nie direkt.** Kommunikation läuft über `GameState`
 (Zustand) und `EventBus` (Signale); Szenenwechsel ausschließlich über `SceneRouter`.
+
+**Transform-Basen stehen in `.tscn` zeilenweise.** Eine spaltenweise gerechnete
+Rotationsmatrix landet transponiert in der Szene — und die Transponierte einer
+Rotation ist ihre *Umkehrung*. So zeigte der Klüverbaum nach unten statt nach
+oben. Wer eine gedrehte Transform von Hand einträgt, prüft sie mit
+`tests/capture_ship.tscn` nach; `_check_ship_model()` im Rauchtest fängt den
+Fall inzwischen ab.
 
 **Der Meeresspiegel steht nicht fest, er wird kalibriert.** `WorldGenerator`
 tastet die Höhenverteilung ab und legt `sea_level` auf das Perzentil, das

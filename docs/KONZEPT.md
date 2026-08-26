@@ -611,7 +611,7 @@ ein Grund, **M1 bis M3 nicht zu überspringen**.
 **M0 abgeschlossen.** Projekt, Ordnerstruktur, sechs Autoloads, Resource-Klassen,
 Eingabebelegung, Speichersystem, Startmenü. Rauchtest mit 68 Prüfungen.
 
-**M1 technisch fertig, Gate offen.** Ozean mit Wellen-Shader, Schiffssteuerung über
+**M1 abgenommen.** Ozean mit Wellen-Shader, Schiffssteuerung über
 Wind und Segelstellung, Verfolgerkamera mit Zoom, Kompass mit Sperrsektor. Das Schiff
 reitet auf denselben Wellen, die der Shader zeichnet — `OceanWaves` und
 `ocean.gdshader` teilen sich Formel und Uhr.
@@ -634,13 +634,14 @@ Zwei Abweichungen vom ursprünglichen Konzept, beide aus der Praxis:
 **Offen in M2:** 3D-Terrain mit Chunk-Streaming. Die Welt existiert bisher als Daten
 und als Karte, noch nicht als Land, an dem man vorbeisegelt.
 
-Was noch fehlt, ist keine Zeile Code: **das Gate aus M1 lässt sich nur durch Spielen
-abnehmen.** Fühlt sich Segeln gut an? Merkst du, wenn der Wind dreht? Fällt die
-Entscheidung negativ aus, wird hier nachjustiert — nicht weitergebaut.
+Das Gate ist genommen: Segeln fühlt sich gut an. Am Modell wurde der Klüverbaum
+korrigiert — er zeigte nach unten und schwebte neben dem Rumpf, weil Godot
+Transform-Basen in `.tscn` zeilenweise speichert und eine spaltenweise gerechnete
+Rotationsmatrix dort transponiert, also als Umkehrung, ankommt.
 
-Stellschrauben dafür in `entities/ship/ship.gd`: `base_speed`, `turn_rate_deg`,
-`speed_inertia`, `turn_inertia`. Wellenbild in `world/ocean/ocean_waves.gd`
-(Konstanten dort und im Shader gemeinsam ändern).
+Stellschrauben fürs Fahrverhalten in `entities/ship/ship.gd`: `base_speed`,
+`turn_rate_deg`, `speed_inertia`, `turn_inertia`. Wellenbild in
+`world/ocean/ocean_waves.gd` (Konstanten dort und im Shader gemeinsam ändern).
 
 ---
 
