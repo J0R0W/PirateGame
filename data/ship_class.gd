@@ -27,8 +27,20 @@ extends Resource
 @export var turn_inertia: float = 1.2
 
 @export_group("Bewaffnung & Laderaum")
+## Rohre insgesamt. Die Haelfte davon liegt auf jeder Seite - eine Breitseite
+## ist nie die ganze Bewaffnung.
 @export var cannon_slots: int = 8
 @export var cargo_capacity: int = 40
+
+@export_group("Auftreten")
+## Sucht dieses Schiff das Gefecht? Kriegsschiffe greifen an, Handelsschiffe
+## fliehen. Steuert die Grundhaltung der KI - siehe [ShipAI].
+@export var warship: bool = false
+## Groesse des Rumpfes gegenueber der Schaluppe.
+##
+## Solange alle Klassen dasselbe Modell benutzen, ist die Groesse das einzige
+## Merkmal, an dem man sie auf See auseinanderhaelt - Regel A1.
+@export var hull_scale: float = 1.0
 
 @export_group("Mannschaft")
 @export var min_crew: int = 10

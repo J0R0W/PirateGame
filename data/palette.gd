@@ -52,6 +52,13 @@ const HULL := Color(0.243, 0.153, 0.110)
 const TIMBER := Color(0.561, 0.416, 0.259)
 const CANVAS := Color(0.914, 0.894, 0.827)
 
+# --- Gefecht ---------------------------------------------------------------
+## Pulverdampf und Gischt. Der einzige Ton, der ueber der See heller ist als
+## der Himmel - eine Breitseite soll man auch gegen die Sonne sehen.
+const SMOKE := Color(0.898, 0.902, 0.886)
+## Eisen: Kugeln in der Luft. Dunkel genug, um vor jeder See zu stehen.
+const IRON := Color(0.145, 0.153, 0.169)
+
 # --- Anzeigen --------------------------------------------------------------
 ## Fließtext und Zahlen im HUD.
 const HUD_TEXT := Color(0.880, 0.930, 0.960)

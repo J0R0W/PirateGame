@@ -10,5 +10,6 @@ adjective = "spanisch"
 color = Color(0.831, 0.627, 0.090, 1)
 name_prefixes = PackedStringArray("Puerto", "Villa", "San", "Santa", "Nueva", "Costa", "Punta", "Bahía", "Cabo", "Isla")
 name_suffixes = PackedStringArray("Cruz", "Marta", "Vera", "Blanca", "Negra", "Grande", "Verde", "Dorada", "Real", "Salada", "Rica", "Vieja", "Esperanza", "Sombra", "Fuego", "Aurora")
+ship_names = PackedStringArray("Santa Ana", "Nuestra Señora", "San Felipe", "La Concepción", "El Galgo", "Santa Teresa", "San Cristóbal", "La Trinidad", "El Rayo", "Santa Isabel")
 aggression = 0.7
 reputation_sensitivity = 1.2

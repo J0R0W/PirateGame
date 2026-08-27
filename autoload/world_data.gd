@@ -48,6 +48,13 @@ var wind_strength: float = 1.0
 
 var weather: Weather = Weather.CLEAR
 
+## Haelt den Wind fest, wo er steht.
+##
+## Fuer das Debug-Menue und fuer Sichtpruefungen: Ohne das dreht der Wind
+## waehrend einer Aufnahme weg, und ein von Hand gesetzter Wert waere nach
+## Sekunden wieder verschwunden.
+var wind_locked: bool = false
+
 # --- Wirtschaft ---
 ## Nach so vielen Spielminuten werden die Lager der Staedte fortgeschrieben.
 ## Haeufiger waere Rechenzeit ohne sichtbaren Unterschied - ein Bestand
@@ -92,6 +99,8 @@ func _update_economy() -> void:
 
 
 func _update_wind(delta: float) -> void:
+	if wind_locked:
+		return
 	_wind_shift_timer -= delta
 	if _wind_shift_timer <= 0.0:
 		_wind_shift_timer = WIND_SHIFT_INTERVAL
@@ -199,6 +208,12 @@ func height_at(x: float, z: float) -> float:
 
 func is_land(x: float, z: float) -> bool:
 	return generator != null and generator.is_land(x, z)
+
+
+## Ist hier tiefes Wasser? Strenger als [method is_land] - eine Untiefe ist
+## kein Land, aber auch kein Platz, an dem ein fremdes Segel auftauchen darf.
+func is_navigable(x: float, z: float) -> bool:
+	return generator != null and generator.is_navigable(x, z)
 
 
 ## Ankerplatz vor einer Stadt - der Punkt, an dem das Schiff beim Auslaufen

@@ -19,6 +19,23 @@ extends Node3D
 ## Wie schnell sie dem Kurs folgt - niedriger als follow_speed, sonst klebt sie.
 @export var turn_speed: float = 1.8
 
+@export_group("Gefecht")
+## Bis hierher richtet sich die Kamera nach einem Gegner. Dieselbe Zahl, die
+## auch das HUD benutzt - siehe [constant Gunnery.ENGAGEMENT_RANGE].
+@export var focus_range: float = Gunnery.ENGAGEMENT_RANGE
+## Wie stark sie das tut. 0 = immer stur hinter dem Schiff, 1 = ganz auf den
+## Gegner.
+@export var focus_weight: float = 0.5
+## Und soweit geht sie dabei zurueck, damit beide Schiffe ins Bild passen.
+@export var focus_pullback: float = 9.0
+## Soweit rueckt der Blickpunkt hoechstens zum Gegner hin, in Metern.
+##
+## Ein fester Abstand und kein Anteil der Entfernung: Bei einem Gegner in 500
+## Metern sind selbst sieben Prozent ein Blickpunkt 35 Meter neben dem eigenen
+## Schiff - und die Kamera steht nur 22 Meter dahinter. Das eigene Schiff lag
+## damit am Bildrand.
+@export var focus_lead: float = 18.0
+
 @export_group("Zoom")
 @export var min_distance: float = 9.0
 @export var max_distance: float = 55.0
@@ -26,6 +43,15 @@ extends Node3D
 
 ## Kurs, dem die Kamera gerade folgt - als Navigationswinkel, nicht als
 ## Godot-Rotation. Siehe docs/RICHTLINIEN.md.
+## Zweites Schiff, das im Bild bleiben soll - im Gefecht der Gegner. Setzt der
+## Segelmodus, sonst null.
+##
+## Ohne das ist ein Seegefecht unsichtbar: Wer eine Breitseite abgeben will,
+## hat den Gegner querab, und querab liegt bei einer Heckkamera ausserhalb des
+## Bildes. In der ersten Aufnahme stand im HUD "Zeelandia - 700 m", und auf dem
+## Bildschirm war nur offene See.
+var focus: Node3D
+
 var _yaw: float = 0.0
 var _distance: float = 22.0
 
@@ -44,9 +70,9 @@ func _ready() -> void:
 func snap() -> void:
 	if target == null:
 		return
-	_yaw = _target_heading()
+	_yaw = _desired_yaw()
 	global_position = _desired_position()
-	look_at(target.global_position + Vector3.UP * look_height)
+	look_at(_look_point())
 
 
 func _unhandled_input(event: InputEvent) -> void:
@@ -60,11 +86,11 @@ func _unhandled_input(event: InputEvent) -> void:
 func _process(delta: float) -> void:
 	if target == null:
 		return
-	_yaw = lerp_angle(_yaw, _target_heading(), 1.0 - exp(-delta * turn_speed))
+	_yaw = lerp_angle(_yaw, _desired_yaw(), 1.0 - exp(-delta * turn_speed))
 	global_position = global_position.lerp(
 		_desired_position(), 1.0 - exp(-delta * follow_speed)
 	)
-	look_at(target.global_position + Vector3.UP * look_height)
+	look_at(_look_point())
 
 
 func _zoom(amount: float) -> void:
@@ -80,6 +106,50 @@ func _target_heading() -> float:
 
 func _desired_position() -> Vector3:
 	# Die Kamera steht hinter dem Ziel, also entgegen seiner Fahrtrichtung.
-	var astern := -SailingMath.direction(_yaw) * _distance
-	var lift := Vector3.UP * (height * (_distance / distance))
+	var reach := _distance + focus_pullback * _focus_amount()
+	var astern := -SailingMath.direction(_yaw) * reach
+	var lift := Vector3.UP * (height * (reach / distance))
 	return target.global_position + Vector3(astern.x, 0.0, astern.y) + lift
+
+
+## Kurs, hinter den sich die Kamera legt.
+##
+## Ohne Gegner ist das der eigene Kurs. Mit Gegner dreht sie zu ihm hin - dann
+## steht sie ihm gegenueber hinter dem eigenen Schiff, und beide sind im Bild.
+func _desired_yaw() -> float:
+	var own := _target_heading()
+	var amount := _focus_amount()
+	if amount <= 0.0:
+		return own
+	var toward := SailingMath.angle_of(_to_focus())
+	return wrapf(own + angle_difference(own, toward) * amount, -PI, PI)
+
+
+## Punkt, auf den die Kamera blickt - zwischen eigenem Schiff und Gegner, aber
+## naeher am eigenen. Das Schiff bleibt die Hauptsache.
+func _look_point() -> Vector3:
+	var here := target.global_position + Vector3.UP * look_height
+	var amount := _focus_amount()
+	if amount <= 0.0:
+		return here
+	var toward := (focus.global_position - target.global_position).normalized()
+	return here + toward * focus_lead * amount
+
+
+## Wieviel Einfluss der Gegner auf die Kameraeinstellung hat, 0.0 bis 1.0.
+## Blendet am Rand der Reichweite auf, damit die Kamera nicht springt, sobald
+## ein Segel die Grenze passiert.
+func _focus_amount() -> float:
+	if focus == null or not is_instance_valid(focus) or target == null:
+		return 0.0
+	var distance_to_focus := _to_focus().length()
+	if distance_to_focus > focus_range:
+		return 0.0
+	return focus_weight * clampf(
+		(focus_range - distance_to_focus) / (focus_range * 0.35), 0.0, 1.0
+	)
+
+
+func _to_focus() -> Vector2:
+	var offset := focus.global_position - target.global_position
+	return Vector2(offset.x, offset.z)

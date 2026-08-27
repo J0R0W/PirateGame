@@ -1,8 +1,8 @@
 ## Die Werft.
 ##
-## Zeigt den Zustand des Schiffes und was die Instandsetzung kostet. Reparieren
-## ist die einzige laufende Ausgabe im Spiel - deshalb steht der Preis gross da
-## und nicht in einer Bestaetigung versteckt.
+## Zeigt den Zustand des Schiffes und was Instandsetzung und Anheuern kosten.
+## Beides sind die laufenden Ausgaben im Spiel - deshalb stehen die Preise
+## gross da und nicht in einer Bestaetigung versteckt.
 class_name ShipyardPanel
 extends VBoxContainer
 
@@ -12,8 +12,11 @@ var town: TownData
 
 var _hull: Label
 var _sails: Label
+var _crew: Label
 var _cost: Label
 var _button: Button
+var _crew_cost: Label
+var _crew_button: Button
 
 
 func setup(target: TownData) -> void:
@@ -31,32 +34,64 @@ func setup(target: TownData) -> void:
 
 	add_child(_spacer())
 
-	_hull = PortWidgets.label("", Palette.HUD_TEXT, 17)
-	_sails = PortWidgets.label("", Palette.HUD_TEXT, 17)
-	add_child(_hull)
-	add_child(_sails)
+	# Raster statt Leerzeichen: In einer Proportionalschrift fluchten sonst
+	# weder die Beschriftungen noch die Zahlen dahinter.
+	var condition := GridContainer.new()
+	condition.columns = 2
+	condition.add_theme_constant_override("h_separation", 24)
+	condition.add_theme_constant_override("v_separation", 4)
+	add_child(condition)
+
+	_hull = _condition_row(condition, "Rumpf")
+	_sails = _condition_row(condition, "Segel")
+	_crew = _condition_row(condition, "Mannschaft")
 
 	add_child(_spacer())
 
 	_cost = PortWidgets.label("", Palette.BRASS, 17)
 	add_child(_cost)
+	_button = _action("Instandsetzen", _on_repair_pressed)
 
-	_button = PortWidgets.button("Instandsetzen", 17)
-	_button.alignment = HORIZONTAL_ALIGNMENT_LEFT
-	_button.size_flags_horizontal = Control.SIZE_SHRINK_BEGIN
-	_button.pressed.connect(_on_repair_pressed)
-	add_child(_button)
+	add_child(_spacer())
+
+	_crew_cost = PortWidgets.label("", Palette.BRASS, 17)
+	add_child(_crew_cost)
+	_crew_button = _action("Mannschaft anheuern", _on_hire_pressed)
 
 	refresh()
+
+
+## Eine Zeile "Beschriftung  Zahl" im Zustandsraster. Gibt das Zahlenfeld
+## zurueck - die Beschriftung aendert sich nie.
+func _condition_row(grid: GridContainer, caption: String) -> Label:
+	grid.add_child(PortWidgets.label(caption, Palette.HUD_DIM, 17))
+	var value := PortWidgets.label("", Palette.HUD_TEXT, 17)
+	grid.add_child(value)
+	return value
+
+
+## Ein Knopf, der links steht statt sich ueber die Breite zu ziehen.
+func _action(caption: String, handler: Callable) -> Button:
+	var button := PortWidgets.button(caption, 17)
+	button.alignment = HORIZONTAL_ALIGNMENT_LEFT
+	button.size_flags_horizontal = Control.SIZE_SHRINK_BEGIN
+	button.pressed.connect(handler)
+	add_child(button)
+	return button
 
 
 func refresh() -> void:
 	var hull_max := GameState.max_hull()
 	var sails_max := GameState.max_sails()
-	_hull.text = "Rumpf    %d / %d" % [GameState.hull, hull_max]
-	_sails.text = "Segel    %d / %d" % [GameState.sails, sails_max]
+	var crew_max := GameState.max_crew()
+	_hull.text = "%d / %d" % [GameState.hull, hull_max]
+	_sails.text = "%d / %d" % [GameState.sails, sails_max]
+	_crew.text = "%d / %d" % [GameState.crew, crew_max]
 	PortWidgets.paint(_hull, _state_color(float(GameState.hull) / float(maxi(hull_max, 1))))
 	PortWidgets.paint(_sails, _state_color(GameState.sail_condition()))
+	PortWidgets.paint(_crew, _state_color(float(GameState.crew) / float(maxi(crew_max, 1))))
+
+	_refresh_crew()
 
 	var cost := Shipyard.full_repair_cost(town)
 	if cost <= 0:
@@ -76,6 +111,37 @@ func refresh() -> void:
 			cost, GameState.gold
 		]
 		PortWidgets.paint(_cost, Palette.FAIR)
+
+
+## Anheuern kostet Gold und bringt Ladezeit und Treffsicherheit zurueck -
+## deshalb steht dabei, wofuer man zahlt.
+func _refresh_crew() -> void:
+	var missing := Shipyard.crew_missing()
+	if missing <= 0:
+		_crew_cost.text = "Die Mannschaft ist vollzählig."
+		PortWidgets.paint(_crew_cost, Palette.HUD_DIM)
+		_crew_button.disabled = true
+		return
+
+	var cost := Shipyard.full_hire_cost(town)
+	_crew_button.disabled = GameState.gold < Shipyard.hire_cost(town, 1)
+	if GameState.gold >= cost:
+		_crew_cost.text = "%d Mann anheuern: %d Gold" % [missing, cost]
+		PortWidgets.paint(_crew_cost, Palette.BRASS)
+	else:
+		_crew_cost.text = "%d Mann anheuern: %d Gold — du hast %d. Es kommt, wer bezahlt wird." % [
+			missing, cost, GameState.gold
+		]
+		PortWidgets.paint(_crew_cost, Palette.FAIR)
+
+
+func _on_hire_pressed() -> void:
+	var count := Shipyard.hire(town)
+	refresh()
+	if count <= 0:
+		repaired.emit("Für Handgeld reicht das Gold nicht.")
+	else:
+		repaired.emit("%d Mann kommen an Bord." % count)
 
 
 func _on_repair_pressed() -> void:

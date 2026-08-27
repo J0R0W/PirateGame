@@ -3,9 +3,10 @@
 Ein Piraten-Sandbox-Spiel in der Tradition von *Sid Meier's Pirates!*, gebaut mit Godot 4.7.
 3D-Präsentation, prozedural erzeugte Karibik, eigene Systeme statt originalgetreuem Nachbau.
 
-**Status:** M3 abgeschlossen — es gibt eine Spielschleife. Segeln, in einem Hafen anlegen,
-günstig kaufen, woanders teuer verkaufen, das Schiff instand setzen.
-Als Nächstes M4: Seekampf.
+**Status:** M4 abgeschlossen — es gibt eine Spielschleife und ein Gefecht. Segeln, in einem
+Hafen anlegen, günstig kaufen, woanders teuer verkaufen, das Schiff instand setzen — und
+unterwegs ein fremdes Segel längsseits nehmen.
+Als Nächstes M5: Entern und Progression.
 
 ## Dokumentation
 
@@ -26,15 +27,23 @@ godot --path .
 godot --headless --path . res://tests/smoke_test.tscn
 ```
 
-217 Prüfungen: Autoloads, Eingabebelegung, Kampagnenstart, Speicher-Roundtrip,
+331 Prüfungen: Autoloads, Eingabebelegung, Kampagnenstart, Speicher-Roundtrip,
 Segelmathematik, Winkelkonvention, Wellenfeld, Schiffsgeometrie, Weltgenerierung
 (Landanteil, Weltrand, Hafenabstände, Nationsbesitz, Determinismus), Ankerplätze,
-Stadtterrassen, Siedlungen, Preisbildung, Handel, Werft, Schaden sowie Gelände-Chunks,
+Stadtterrassen, Siedlungen, Preisbildung, Handel, Werft, Anheuern, Ballistik,
+Trefferzonen, Schiffs-KI, Prisen, die Stellschrauben des Debug-Menüs sowie Gelände-Chunks,
 Grundberührung, Projektregeln und die Frage, ob überhaupt jedes Skript kompiliert.
 
-Darunter die Abnahmebedingung von M3 selbst: 20 Fass Zucker im billigsten Hafen kaufen,
-im teuersten verkaufen, und die Fahrt muss Gewinn abwerfen — die Route rückwärts Verlust.
-Exit-Code 0 = bestanden.
+Darunter die Abnahmebedingungen der Meilensteine selbst, gefahren statt behauptet:
+
+- **M3** — 20 Fass Zucker im billigsten Hafen kaufen, im teuersten verkaufen. Die Fahrt
+  muss Gewinn abwerfen, die Route rückwärts Verlust.
+- **M4** — zweimal dasselbe Gefecht mit demselben Würfel, einmal mit einem Kapitän, der
+  den Gegner querab hält, einmal mit einem, der drauflosfährt. 158 gegen 25 Punkte
+  Schaden, und nur der erste zwingt den Gegner zur Flagge.
+
+Das Gefecht wird dabei wirklich gefahren — zwei volle Duelle im Zeitraffer, deshalb
+dauert der Durchlauf gut eine halbe Minute. Exit-Code 0 = bestanden.
 
 ```bash
 godot --path . res://tests/capture_sailing.tscn
@@ -68,12 +77,18 @@ Höhensprünge, Kantenpassung, Chunk-Belegung). Zum Justieren der Parameter.
 godot --path . res://tests/capture_island.tscn
 godot --path . res://tests/capture_town.tscn
 godot --path . res://tests/capture_port.tscn
+godot --path . res://tests/capture_battle.tscn
 ```
 
 Zeigt eine Küste vier Mal (vollständig, ohne Dunst, ohne Wasser, Drahtgitter), eine
-Siedlung aus drei Abständen und den Hafenbildschirm mit Markt, Kauf und Werft. Damit
-lässt sich unterscheiden, ob ein Darstellungsfehler vom Gelände, vom Wasser oder von der
-Atmosphäre kommt — und ob Häuser wirklich auf dem Hang stehen.
+Siedlung aus drei Abständen, den Hafenbildschirm mit Markt, Kauf und Werft sowie ein
+Seegefecht in fünf Schritten (Segel in Sicht, längsseits, Breitseite, Einschlag, Prise).
+Damit lässt sich unterscheiden, ob ein Darstellungsfehler vom Gelände, vom Wasser oder von
+der Atmosphäre kommt — und ob Häuser wirklich auf dem Hang stehen.
+
+Die Gefechtsaufnahme ist kein Luxus: Pulverdampf, fliegende Kugeln und Wassersäulen
+entstehen erst beim Rendern, und die erste zeigte offene See, weil der Gegner querab lag
+und die Kamera nach vorn sah.
 
 ## Struktur
 
@@ -82,9 +97,9 @@ Atmosphäre kommt — und ob Häuser wirklich auf dem Hang stehen.
 | `autoload/` | Singletons: `EventBus`, `GameState`, `WorldData`, `SceneRouter`, `SaveManager`, `AudioDirector` |
 | `data/` | Resource-Klassen (`ShipClass`, `TownData`, `NationData`, `CargoType`, `OfficerData`), Palette, Warenverzeichnis |
 | `resources/` | Konkrete `.tres`-Instanzen — Nationen, Waren, Schiffsklassen. Hier wird balanciert, nicht im Code |
-| `world/` | Weltgenerierung, Gelände-Chunks mit Streaming, Ozean-Shader und Wellenformel, Siedlungen, Wirtschaft |
+| `world/` | Weltgenerierung, Gelände-Chunks mit Streaming, Ozean-Shader und Wellenformel, Siedlungen, Wirtschaft, Gefecht |
 | `modes/` | Die Modus-Szenen: `sailing`, `port`, `boarding`, `menu` |
-| `entities/` | Schiffe, Geschosse |
+| `entities/` | Schiffe und ihre Kapitäne |
 | `ui/` | HUD, Seekarte, Hafenbildschirme, Theme |
 | `tests/` | Rauchtests |
 
@@ -102,10 +117,18 @@ Verbindlich in [docs/RICHTLINIEN.md](docs/RICHTLINIEN.md). Die wichtigsten:
   in schwebende Fetzen.
 - **Was auf dem Gelände steht, fragt `terrain_surface_y()`** — die Höhenfunktion und die
   gezeichnete Fläche weichen an einer Küste um Meter voneinander ab.
+- **Erst das Ergebnis, dann der Flug** — eine Breitseite wird beim Abfeuern ausgewürfelt,
+  die Kugeln fliegen danach zu einem Ausgang, der schon feststeht.
 - **Die Wellenformel existiert doppelt** — `OceanWaves` und `ocean.gdshader` müssen
   synchron bleiben, sonst schwebt das Schiff über der sichtbaren See.
+- **Die Kamera zeigt, worauf es ankommt** — wo eine Regel den Spieler zwingt, etwas
+  seitlich zu halten, muss die Kamera davon wissen. Sonst ist das Gefecht unsichtbar.
 
-Alle bis auf die letzte prüft der Rauchtest automatisch.
+Vier davon prüft der Rauchtest automatisch: die Palette, die Winkelkonvention, das
+beidseitige Gelände und die Aufsetzhöhe. Es sind die vier, deren Verletzung im laufenden
+Spiel *nicht* auffällt — eine falsche Farbe sieht nur etwas anders aus, ein direkt
+gelesenes `rotation.y` liefert einen plausiblen, aber gespiegelten Winkel. Der Rest fällt
+auf, sobald man hinsieht.
 
 ## Steuerung
 
@@ -114,11 +137,25 @@ Alle bis auf die letzte prüft der Rauchtest automatisch.
 | A / D | Ruder backbord / steuerbord |
 | W / S | Segel setzen / reffen |
 | Mausrad | Kamera heran und weg |
-| Leertaste | Anlegen, wenn ein Hafen in Reichweite ist |
+| Q / E | Breitseite backbord / steuerbord |
+| Leertaste | Anlegen — oder eine gestrichene Flagge aufbringen |
 | M | Seekarte |
-| Esc | Karte schließen, sonst zurück ins Menü |
+| F3 | Debug-Menü |
+| Esc | Offenes Fenster schließen, sonst zurück ins Menü |
 
-Belegt, aber noch ohne Wirkung: **Q / E** (Breitseiten, M4), **F** (Fernrohr),
-**T** (Zeitraffer).
+Die beiden Zeilen unten in der Mitte sagen, was die Batterien tun: *lädt* mit Prozent,
+*bereit*, oder **liegt an** in Grün — dann trifft die Breitseite auch. Bug und Heck
+liegen außerhalb des Feuerbereichs; wer hinter dem Gegner herfährt, schießt ins Leere.
+
+Belegt, aber noch ohne Wirkung: **F** (Fernrohr), **T** (Zeitraffer).
+
+**F3 — Debug-Menü.** Drei Größen, auf die man beim Ausprobieren sonst am längsten wartet:
+Windrichtung und -stärke (mit „festhalten", sonst dreht der Wind den Regler wieder weg),
+ein Fahrtfaktor fürs eigene Schiff, sowie Abstand und Höchstzahl fremder Segel samt einem
+Knopf, der sofort eines setzt. Dazu ein Schalter für das Gitternetz auf dem Wasser. Nichts
+davon landet in einer Speicherdatei; der Knoten fällt vor einem Release aus
+`modes/sailing/sailing_mode.tscn`.
 
 Im Hafen: **Markt**, **Werft**, **Speichern**, **Ablegen** — oder **Esc** zum Auslaufen.
+Die Werft setzt Rumpf und Segel instand und heuert Mannschaft an; beides geht auch
+anteilig, wenn das Gold nicht für alles reicht.

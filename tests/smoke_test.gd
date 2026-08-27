@@ -31,6 +31,14 @@ func _ready() -> void:
 	_check_damage()
 	_check_ship_model()
 	_check_heading_convention()
+	_check_gunnery()
+	_check_salvo()
+	_check_ship_ai()
+	_check_ship_combat()
+	_check_prize()
+	_check_hiring()
+	await _check_debug_knobs()
+	await _check_duel()
 	await _check_terrain()
 	_check_code_conventions()
 	_check_everything_loads()
@@ -48,7 +56,7 @@ func _check_input_map() -> void:
 	var expected := [
 		"helm_port", "helm_starboard", "sails_more", "sails_less",
 		"fire_port", "fire_starboard", "interact", "spyglass",
-		"toggle_map", "time_faster", "pause",
+		"toggle_map", "time_faster", "pause", "debug_menu",
 	]
 	for action: String in expected:
 		var known := InputMap.has_action(action)
@@ -60,7 +68,7 @@ func _check_new_campaign() -> void:
 	GameState.new_campaign("Testkapitaen", 12345)
 	_assert(GameState.captain_name == "Testkapitaen", "Kapitaensname gesetzt")
 	_assert(GameState.gold == 500, "Startgold 500")
-	_assert(GameState.crew == 20, "Startcrew 20")
+	_assert(GameState.crew == GameState.max_crew(), "Voll besetzt gestartet")
 	_assert(WorldData.generated, "Welt als erzeugt markiert")
 	_assert(WorldData.world_seed == 12345, "Seed uebernommen")
 	_assert(WorldData.wind_strength > 0.0, "Wind hat Staerke")
@@ -853,6 +861,602 @@ func _check_damage() -> void:
 
 	GameState.hull = GameState.max_hull()
 	GameState.sails = GameState.max_sails()
+
+
+# --- Gefecht ---------------------------------------------------------------
+
+func _check_gunnery() -> void:
+	# Querab heisst querab: Steuerbord liegt 90 Grad rechts vom Kurs.
+	_assert(is_equal_approx(Gunnery.abeam(0.0, Gunnery.STARBOARD), PI * 0.5),
+		"Steuerbord liegt bei Kurs Nord im Osten")
+	_assert(is_equal_approx(Gunnery.abeam(0.0, Gunnery.PORT), -PI * 0.5),
+		"Backbord liegt bei Kurs Nord im Westen")
+
+	# Die Zahl, die Manoevrieren belohnt.
+	_assert(is_equal_approx(Gunnery.bearing_quality(0.0, PI * 0.5, Gunnery.STARBOARD), 1.0),
+		"Ziel genau querab gibt volle Lage")
+	_assert(Gunnery.bearing_quality(0.0, 0.0, Gunnery.STARBOARD) == 0.0,
+		"Ziel voraus gibt keine Lage")
+	_assert(Gunnery.bearing_quality(0.0, PI, Gunnery.STARBOARD) == 0.0,
+		"Ziel achteraus gibt keine Lage")
+	_assert(Gunnery.bearing_quality(0.0, PI * 0.5, Gunnery.PORT) == 0.0,
+		"Die falsche Seite liegt nie an")
+
+	var half := Gunnery.bearing_quality(
+		0.0, PI * 0.5 - deg_to_rad(Gunnery.FIRING_ARC * 0.5), Gunnery.STARBOARD
+	)
+	_assert(is_equal_approx(half, 0.5), "Halber Feuerbereich gibt halbe Lage (%.2f)" % half)
+
+	_assert(Gunnery.better_side(0.0, PI * 0.5) == Gunnery.STARBOARD,
+		"Ziel im Osten liegt steuerbord")
+	_assert(Gunnery.better_side(0.0, -PI * 0.5) == Gunnery.PORT,
+		"Ziel im Westen liegt backbord")
+
+	# Entfernung: bis zur idealen Distanz volle Wirkung, danach fallend.
+	_assert(is_equal_approx(Gunnery.range_factor(50.0), 1.0), "Nahschuss trifft voll")
+	_assert(is_equal_approx(Gunnery.range_factor(Gunnery.IDEAL_RANGE), 1.0),
+		"Ideale Entfernung trifft voll")
+	_assert(Gunnery.range_factor(Gunnery.MAX_RANGE) < 0.25,
+		"Auf hoechste Entfernung trifft kaum etwas")
+	_assert(Gunnery.hit_chance(Gunnery.MAX_RANGE + 1.0, 1.0, 1.0) == 0.0,
+		"Ausser Reichweite trifft nichts")
+	_assert(Gunnery.hit_chance(100.0, 0.0, 1.0) == 0.0, "Ohne Lage trifft nichts")
+
+	# Mannschaft: fehlende Leute kosten Treffsicherheit und Ladezeit.
+	_assert(Gunnery.hit_chance(100.0, 1.0, 0.5) < Gunnery.hit_chance(100.0, 1.0, 1.0),
+		"Halbe Mannschaft trifft schlechter")
+	_assert(Gunnery.reload_seconds(0.5) > Gunnery.reload_seconds(1.0),
+		"Halbe Mannschaft laedt langsamer")
+	_assert(is_equal_approx(Gunnery.reload_seconds(0.1), Gunnery.reload_seconds(
+		Gunnery.MIN_CREW_FACTOR)), "Ladezeit hat eine Untergrenze")
+
+	# Trefferzonen: nah in den Rumpf, fern in die Takelage.
+	var close := Gunnery.zone_weights(40.0)
+	var far := Gunnery.zone_weights(Gunnery.MAX_RANGE)
+	_assert(close[Gunnery.Zone.HULL] > close[Gunnery.Zone.SAILS],
+		"Nahschuesse gehen in den Rumpf")
+	_assert(far[Gunnery.Zone.SAILS] > far[Gunnery.Zone.HULL],
+		"Fernschuesse gehen in die Takelage")
+	for distance: float in [0.0, 60.0, 200.0, 419.0]:
+		var weights := Gunnery.zone_weights(distance)
+		var sum := weights[0] + weights[1] + weights[2]
+		_assert(is_equal_approx(sum, 1.0), "Trefferzonen summieren sich auf 1 (%.0f m)" % distance)
+
+	# Aufgeben: nur ein angeschlagenes Schiff, und Ruf hilft nach.
+	_assert(not Gunnery.will_strike(1.0, 1.0, 1.0), "Ein unversehrtes Schiff ergibt sich nie")
+	_assert(Gunnery.will_strike(0.2, 1.0, 0.0), "Ein zerschossener Rumpf gibt auf")
+	_assert(Gunnery.will_strike(1.0, 0.2, 0.0), "Eine dezimierte Mannschaft gibt auf")
+	var brink := Gunnery.STRIKE_HULL + Gunnery.FEAR_BONUS * 0.5
+	_assert(Gunnery.will_strike(brink, 1.0, 1.0) and not Gunnery.will_strike(brink, 1.0, 0.0),
+		"Beruechtigtheit laesst frueher aufgeben")
+
+
+## Breitseiten sind Wuerfelwuerfe - geprueft wird die Verteilung, nicht ein Wurf.
+func _check_salvo() -> void:
+	var rng := RandomNumberGenerator.new()
+	rng.seed = 20260827
+
+	var abeam_hits := 0
+	var bow_hits := 0
+	var rounds := 400
+	for i in rounds:
+		abeam_hits += Gunnery.hits_in(Gunnery.resolve_salvo(rng, 5, 140.0, 1.0, 1.0))
+		bow_hits += Gunnery.hits_in(Gunnery.resolve_salvo(rng, 5, 140.0, 0.2, 1.0))
+	_assert(abeam_hits > bow_hits * 3,
+		"Querab trifft weit oefter als schraeg (%d gegen %d von je %d Schuss)"
+		% [abeam_hits, bow_hits, rounds * 5])
+
+	var close_hull := 0
+	var close_sails := 0
+	var far_hull := 0
+	var far_sails := 0
+	for i in rounds:
+		var near_salvo := Gunnery.resolve_salvo(rng, 5, 60.0, 1.0, 1.0)
+		close_hull += Gunnery.damage_in(near_salvo, Gunnery.Zone.HULL)
+		close_sails += Gunnery.damage_in(near_salvo, Gunnery.Zone.SAILS)
+		var far_salvo := Gunnery.resolve_salvo(rng, 5, 380.0, 1.0, 1.0)
+		far_hull += Gunnery.damage_in(far_salvo, Gunnery.Zone.HULL)
+		far_sails += Gunnery.damage_in(far_salvo, Gunnery.Zone.SAILS)
+	_assert(close_hull > close_sails,
+		"Aus der Nahe bricht der Rumpf (%d gegen %d Schaden)" % [close_hull, close_sails])
+	_assert(far_sails > far_hull,
+		"Von weit her faellt die Takelage (%d gegen %d Schaden)" % [far_sails, far_hull])
+
+	var empty := Gunnery.resolve_salvo(rng, 4, 800.0, 1.0, 1.0)
+	_assert(Gunnery.hits_in(empty) == 0, "Ausser Reichweite trifft keine Kugel")
+	_assert(empty.size() == 4, "Auch ein Fehlschuss ist ein Schuss - fuer die Fontaene")
+
+
+func _check_ship_ai() -> void:
+	# Ein Segler faehrt nicht in den Sperrsektor, auch wenn er gerne wuerde.
+	var wind := 0.0
+	var forced := SailingMath.sailable_heading(0.0, wind)
+	_assert(absf(angle_difference(forced, wind)) > deg_to_rad(SailingMath.CLOSE_HAULED_LIMIT),
+		"Kurs in den Wind wird auf den Anlieger gelegt")
+	_assert(SailingMath.sail_efficiency(forced, wind) > 0.5,
+		"Und der Anlieger zieht auch wirklich")
+	var free_course := deg_to_rad(120.0)
+	_assert(is_equal_approx(SailingMath.sailable_heading(free_course, wind), free_course),
+		"Ein fahrbarer Kurs bleibt unveraendert")
+
+	# Grundhaltung: Handelsschiffe fliehen immer, Kriegsschiffe erst angeschlagen.
+	_assert(ShipAI.stance(false, 1.0, 300.0) == ShipAI.Stance.FLEE,
+		"Ein Handelsschiff flieht auch unversehrt")
+	_assert(ShipAI.stance(true, 1.0, 300.0) == ShipAI.Stance.ENGAGE,
+		"Ein Kriegsschiff sucht das Gefecht")
+	_assert(ShipAI.stance(true, 1.0, 900.0) == ShipAI.Stance.APPROACH,
+		"Ausser Schussweite wird erst geschlossen")
+	_assert(ShipAI.stance(true, 0.2, 300.0) == ShipAI.Stance.FLEE,
+		"Ein angeschlagenes Kriegsschiff bricht ab")
+
+	# Der Platz laengsseits: Gegner faehrt nach Norden, wir wollen ihn
+	# steuerbord haben - also gehoeren wir an seine Backbordseite.
+	var enemy_at := Vector2(Gunnery.IDEAL_RANGE, 0.0)
+	var post := ShipAI.station(enemy_at, 0.0, Gunnery.STARBOARD)
+	_assert(post.distance_to(Vector2.ZERO) < 1.0,
+		"Der Platz steuerbord liegt backbord des Gegners")
+	_assert(post.distance_to(enemy_at) < Gunnery.MAX_RANGE,
+		"Und in Schussweite")
+
+	# Steht man schon darauf, laeuft man laengsseits mit - und die Breitseite
+	# liegt an.
+	var beam := ShipAI.desired_heading(
+		ShipAI.Stance.ENGAGE, Vector2.ZERO, enemy_at, 0.0, Gunnery.STARBOARD, PI
+	)
+	_assert(Gunnery.bearing_quality(beam, PI * 0.5, Gunnery.STARBOARD) > 0.9,
+		"Auf dem Platz laengsseits liegt die Breitseite an")
+
+	# Weit draussen wird aufgeschlossen, nicht umkreist.
+	var chase := ShipAI.desired_heading(
+		ShipAI.Stance.ENGAGE, Vector2.ZERO, Vector2(900.0, 0.0), 0.0, Gunnery.STARBOARD, PI
+	)
+	_assert(absf(angle_difference(chase, PI * 0.5)) < deg_to_rad(15.0),
+		"Weit draussen wird auf den Gegner zugehalten")
+
+	# Zu dicht dran wird abgedreht, statt zu rammen.
+	var sheer := ShipAI.desired_heading(
+		ShipAI.Stance.ENGAGE, Vector2.ZERO, Vector2(40.0, 0.0), 0.0, Gunnery.STARBOARD, PI
+	)
+	_assert(absf(angle_difference(sheer, PI * 0.5)) > PI * 0.5,
+		"Zu nah wird abgedreht statt gerammt")
+
+	# Wind aus Nord, Gegner im Norden: Die Flucht nach Sueden laeuft raumschots
+	# und wird deshalb nicht auf einen Anlieger gelegt.
+	var away := ShipAI.desired_heading(
+		ShipAI.Stance.FLEE, Vector2.ZERO, Vector2(0.0, -200.0), 0.0, Gunnery.PORT, 0.0
+	)
+	_assert(absf(angle_difference(away, PI)) < deg_to_rad(1.0),
+		"Wer flieht, dreht dem Gegner den Ruecken zu")
+	# Steht der Gegner in Lee, geht das nicht: Dann bleibt nur der Anlieger.
+	var upwind := ShipAI.desired_heading(
+		ShipAI.Stance.FLEE, Vector2.ZERO, Vector2(0.0, 200.0), 0.0, Gunnery.PORT, 0.0
+	)
+	_assert(absf(angle_difference(upwind, 0.0)) > deg_to_rad(SailingMath.CLOSE_HAULED_LIMIT),
+		"Flucht gegen den Wind laeuft ueber den Anlieger")
+
+	_assert(ShipAI.sail_setting(ShipAI.Stance.ENGAGE, 30.0) < 3,
+		"Dicht am Gegner wird Fahrt weggenommen")
+	_assert(ShipAI.sail_setting(ShipAI.Stance.ENGAGE, 200.0) == 3,
+		"Im Gefecht selbst steht alles - wer reffft, wird abgehaengt")
+	_assert(ShipAI.sail_setting(ShipAI.Stance.FLEE, 400.0) == 3,
+		"Auf der Flucht ebenso")
+	_assert(not ShipAI.should_fire(0.1, 100.0), "Ohne Lage wird nicht gefeuert")
+	_assert(not ShipAI.should_fire(1.0, Gunnery.MAX_RANGE + 50.0),
+		"Ausser Reichweite wird nicht gefeuert")
+	_assert(ShipAI.should_fire(1.0, 100.0), "Mit Lage und in Reichweite wird gefeuert")
+
+
+## Das Schiff als Node: Zaehigkeit, Batterien, Schaden.
+func _check_ship_combat() -> void:
+	var ship := _make_ship("res://resources/ships/patrol_sloop.tres")
+
+	_assert(ship.max_hull == 115, "Zaehigkeit kommt aus der .tres-Datei")
+	_assert(ship.cannons_per_side == 5, "Zehn Rohre sind fuenf je Seite")
+	_assert(ship.warship, "Die Patrouille ist ein Kriegsschiff")
+	_assert(is_equal_approx(ship.sail_health(), 1.0), "Frische Segel ziehen voll")
+
+	_assert(ship.battery_ready(Gunnery.PORT), "Ein frisches Schiff ist geladen")
+	_assert(ship.fire(Gunnery.PORT), "Die Breitseite faellt")
+	_assert(not ship.battery_ready(Gunnery.PORT), "Danach muss nachgeladen werden")
+	_assert(ship.battery_ready(Gunnery.STARBOARD), "Die andere Seite bleibt geladen")
+	_assert(not ship.fire(Gunnery.PORT), "Eine leere Batterie feuert nicht")
+	_assert(ship.battery_progress(Gunnery.PORT) < 0.1, "Der Ladebalken faengt bei null an")
+
+	# Zerschossene Segel kosten Fahrt - der Grund, warum Fernbeschuss lohnt.
+	var full := SailingMath.target_speed(ship.base_speed, PI, 0.0, 1.0, 1.0, ship.sail_health())
+	ship.take_hit(Gunnery.Zone.SAILS, 60)
+	var shredded := SailingMath.target_speed(ship.base_speed, PI, 0.0, 1.0, 1.0, ship.sail_health())
+	_assert(shredded < full * 0.6, "Zerschossene Takelage kostet Fahrt (%.1f statt %.1f kn)"
+		% [shredded, full])
+
+	ship.take_hit(Gunnery.Zone.CREW, 40)
+	_assert(ship.crew < ship.max_crew, "Kartaetschen kosten Leute")
+	_assert(Gunnery.reload_seconds(ship.crew_fraction()) > Gunnery.RELOAD_SECONDS,
+		"Und damit Ladezeit")
+
+	ship.strike()
+	_assert(ship.struck, "Ein Schiff kann die Flagge streichen")
+	_assert(not ship.battery_ready(Gunnery.STARBOARD), "Wer gestrichen hat, feuert nicht mehr")
+
+	var doomed := _make_ship("res://resources/ships/merchant_brig.tres")
+	var went_down := [false]
+	doomed.sunk.connect(func() -> void: went_down[0] = true)
+	doomed.take_hit(Gunnery.Zone.HULL, 999)
+	_assert(went_down[0], "Ein durchschossener Rumpf sinkt")
+	_assert(doomed.finished, "Ein gesunkenes Schiff ist erledigt")
+	doomed.take_hit(Gunnery.Zone.HULL, 10)
+	_assert(doomed.hull == 0, "Auf ein Wrack wird nicht weitergeschossen")
+
+	ship.queue_free()
+	doomed.queue_free()
+
+
+## Ein Schiff einer Klasse, fertig ausgeruestet. Der Aufrufer haengt es selbst
+## in den Baum - apply_class() braucht den Baum fuer die Segelanimation.
+func _make_ship(class_path: String) -> Ship:
+	var packed: PackedScene = load("res://entities/ship/ship.tscn")
+	var ship: Ship = packed.instantiate()
+	ship.player_controlled = false
+	add_child(ship)
+	ship.apply_class(load(class_path))
+	return ship
+
+
+
+## Die Werft ersetzt auch Leute - seit M4 kostet ein Gefecht Mannschaft.
+func _check_hiring() -> void:
+	GameState.new_campaign("Werber", 31415)
+	var town: TownData = WorldData.towns[0]
+
+	_assert(Shipyard.crew_missing() == GameState.max_crew() - GameState.crew,
+		"Es fehlt, was zur vollen Besatzung fehlt")
+	GameState.crew = GameState.max_crew()
+	_assert(Shipyard.full_hire_cost(town) == 0, "Volle Mannschaft kostet nichts")
+	_assert(Shipyard.hire(town) == 0, "Und laesst sich nicht aufstocken")
+
+	GameState.crew = GameState.max_crew() - 10
+	GameState.gold = 100000
+	var before := GameState.gold
+	var hired := Shipyard.hire(town)
+	_assert(hired == 10, "Mit Gold kommt die ganze Mannschaft (%d Mann)" % hired)
+	_assert(GameState.crew == GameState.max_crew(), "Und das Schiff ist wieder voll besetzt")
+	_assert(GameState.gold < before, "Handgeld kostet Gold (%d)" % (before - GameState.gold))
+
+	# Teilanheuerung: Wer knapp bei Kasse ist, bekommt, was er bezahlen kann.
+	GameState.crew = GameState.max_crew() - 10
+	GameState.gold = Shipyard.hire_cost(town, 3)
+	var partial := Shipyard.hire(town)
+	_assert(partial == 3, "Knappes Gold heuert anteilig an (%d Mann)" % partial)
+	_assert(GameState.gold == 0, "Und ist danach ausgegeben")
+
+	GameState.gold = 0
+	_assert(Shipyard.hire(town) == 0, "Ohne Gold kommt niemand")
+
+	# Eine grosse Stadt ist billiger als ein Dorf - dieselbe Regel wie beim Rumpf.
+	var village := _town_of_tier(0)
+	var capital := _town_of_tier(2)
+	if village != null and capital != null:
+		_assert(Shipyard.hire_cost(capital, 10) < Shipyard.hire_cost(village, 10),
+			"In der Hauptstadt heuert man billiger an als im Dorf")
+
+	_assert(GameState.max_crew() > 0, "Die Mannschaftsgroesse kommt aus der Schiffsklasse")
+	GameState.crew = GameState.max_crew() + 50
+	_assert(GameState.crew == GameState.max_crew(),
+		"Mehr Leute als Kojen gibt es nicht")
+
+
+func _town_of_tier(tier: int) -> TownData:
+	for town: TownData in WorldData.towns:
+		if town.size_tier == tier:
+			return town
+	return null
+
+## Was ein besiegter Gegner hergibt - und was ein verlorenes Gefecht kostet.
+func _check_prize() -> void:
+	GameState.new_campaign("Freibeuter", 777)
+	GameState.gold = 100
+	GameState.cargo.clear()
+
+	var combat := NavalCombat.new()
+	add_child(combat)
+
+	var mine := _make_ship("res://resources/ships/sloop.tres")
+	mine.global_position = Vector3.ZERO
+	combat.setup(mine)
+
+	var prize := _make_ship("res://resources/ships/merchant_brig.tres")
+	prize.ship_name = "Testprise"
+	prize.nation_id = 0
+	prize.gold = 450
+	prize.cargo = {&"sugar": 30, &"rum": 25}
+	prize.global_position = Vector3(600.0, 0.0, 0.0)
+	combat.adopt(prize)
+
+	_assert(combat.prize_in_reach() == null, "Ein fahrendes Schiff ist keine Prise")
+	prize.strike()
+	_assert(combat.prize_in_reach() == null, "Ein gestrichenes auf 600 Metern auch nicht")
+	prize.global_position = Vector3(60.0, 0.0, 0.0)
+	_assert(combat.prize_in_reach() == prize, "Laengsseit schon")
+
+	var capacity := GameState.cargo_capacity()
+	var notoriety_before := GameState.notoriety
+	combat.take_prize(prize)
+
+	_assert(GameState.gold == 550, "Das Gold der Prise geht an Bord")
+	_assert(GameState.cargo_used() == capacity,
+		"Der Laderaum wird voll (%d von %d)" % [GameState.cargo_used(), capacity])
+	_assert(GameState.cargo_of(&"rum") < 25,
+		"Was nicht hineinpasst, bleibt zurueck - ein voller Laderaum kostet Beute")
+	_assert(GameState.notoriety > notoriety_before, "Eine Prise macht beruechtigt")
+	_assert(GameState.reputation[0] < 0, "Und kostet Ansehen bei der bestohlenen Nation")
+	_assert(combat.prize_in_reach() == null, "Eine ausgeraeumte Prise ist keine mehr")
+
+	# Ein verlorenes Gefecht beendet keinen Lauf - es verteuert ihn.
+	GameState.gold = 900
+	GameState.cargo.clear()
+	GameState.add_cargo(&"tools", 10)
+	mine.take_hit(Gunnery.Zone.HULL, 9999)
+
+	_assert(GameState.gold < 900, "Wer verliert, wird ausgeraubt (%d Gold uebrig)"
+		% GameState.gold)
+	_assert(GameState.cargo_of(&"tools") == 5, "Die halbe Ladung geht ueber Bord")
+	_assert(mine.hull > 0, "Das eigene Schiff bleibt ueber Wasser")
+	_assert(not mine.finished, "Der Lauf geht weiter")
+
+	combat.queue_free()
+	mine.queue_free()
+
+
+# --- Die Stellschrauben des Debug-Menues -----------------------------------
+#
+# Geprueft wird nicht die Oberflaeche, sondern das, woran sie dreht. Ein Regler,
+# der nichts bewegt, sieht kaputt aus - und genau das ist beim Wind der Fall,
+# wenn er nicht festgehalten wird.
+
+func _check_debug_knobs() -> void:
+	GameState.new_campaign("Regler", 2024)
+
+	# Der Wind laesst sich festhalten.
+	WorldData.set_wind(deg_to_rad(90.0), 1.0)
+	WorldData.wind_locked = true
+	# Zwei Minuten Spielzeit auf einen Schlag: Von Hand aufgerufen, damit die
+	# Pruefung nicht zwei Minuten dauert.
+	WorldData._process(120.0)
+	_assert(is_equal_approx(WorldData.wind_direction, deg_to_rad(90.0)),
+		"Festgehaltener Wind dreht nicht weg")
+
+	WorldData.wind_locked = false
+	WorldData._process(120.0)
+	_assert(not is_equal_approx(WorldData.wind_direction, deg_to_rad(90.0)),
+		"Losgelassener Wind dreht wieder")
+
+	await _check_speed_multiplier()
+	await _check_spawn_knobs()
+	_check_water_grid()
+
+
+## Der Fahrtfaktor geht wirklich in die Fahrt ein - und laesst die Werte der
+## Schiffsklasse dabei unberuehrt.
+func _check_speed_multiplier() -> void:
+	WorldData.set_wind(0.0, 1.0)
+	WorldData.wind_locked = true
+
+	var plain := await _run_ship(1.0)
+	var fast := await _run_ship(3.0)
+	_assert(fast > plain * 2.0,
+		"Der Fahrtfaktor beschleunigt das Schiff (%.1f statt %.1f kn)" % [fast, plain])
+
+	WorldData.wind_locked = false
+
+
+## Faehrt ein Schiff kurz mit einem Faktor und gibt die erreichte Fahrt zurueck.
+func _run_ship(multiplier: float) -> float:
+	var ship := _make_ship("res://resources/ships/sloop.tres")
+	# Wind aus Nord, Kurs Sued: vor dem Wind, volle Segel.
+	ship.global_position = Vector3(0.0, 0.0, 0.0)
+	ship.set_heading(PI)
+	ship.sail_command = 3
+	ship.speed_multiplier = multiplier
+
+	var previous := Engine.time_scale
+	Engine.time_scale = 10.0
+	for step in 90:
+		await get_tree().physics_frame
+	Engine.time_scale = previous
+
+	var reached := ship.speed
+	_assert(is_equal_approx(ship.ship_class.base_speed, 12.0),
+		"Die Schiffsklasse bleibt unberuehrt (%.1f kn Grundfahrt)" % ship.ship_class.base_speed)
+	ship.queue_free()
+	return reached
+
+
+## Hoechstzahl und Sofort-Segel.
+func _check_spawn_knobs() -> void:
+	var combat := NavalCombat.new()
+	add_child(combat)
+
+	var mine := _make_ship("res://resources/ships/sloop.tres")
+	var spot := _open_sea()
+	mine.global_position = Vector3(spot.x, 0.0, spot.y)
+	combat.setup(mine)
+
+	combat.max_ships = 0
+	combat.spawn_interval = 5.0
+	combat._update_spawning(999.0)
+	_assert(combat.ships().is_empty(), "Hoechstzahl null laesst die See leer")
+
+	# Der Knopf im Menue setzt trotzdem ein Segel - er soll gerade dann helfen,
+	# wenn man sonst warten muesste.
+	_assert(combat.spawn_now(), "Der Knopf setzt sofort ein Segel")
+	_assert(combat.ships().size() == 1, "Und genau eines")
+
+	combat.max_ships = 3
+	combat._update_spawning(999.0)
+	_assert(combat.ships().size() > 1, "Mit hoeherer Hoechstzahl kommt mehr")
+
+	combat.queue_free()
+	mine.queue_free()
+	await get_tree().process_frame
+
+
+## Das Gitternetz auf dem Wasser - der buchstaebliche Teil des Schachbretts.
+func _check_water_grid() -> void:
+	var packed: PackedScene = load("res://world/ocean/ocean.tscn")
+	var sea: Ocean = packed.instantiate()
+	add_child(sea)
+
+	var material := sea.material_override as ShaderMaterial
+	_assert(material != null, "Der Ozean hat ein Shadermaterial")
+	if material == null:
+		return
+
+	_assert(sea.show_grid, "Das Gitternetz ist vorerst an")
+	sea.show_grid = false
+	_assert(float(material.get_shader_parameter("grid_strength")) == 0.0,
+		"Und laesst sich abschalten")
+	sea.show_grid = true
+	_assert(is_equal_approx(
+		float(material.get_shader_parameter("grid_strength")), Ocean.GRID_STRENGTH
+	), "Und wieder an")
+
+	sea.queue_free()
+
+
+# --- Das Abnahmekriterium von M4 -------------------------------------------
+#
+# "Ein Gefecht gegen ein KI-Schiff ist spannend und Manoevrieren wird belohnt."
+# Spannend kann kein Test beurteilen - das entscheidet sich beim Spielen. Der
+# zweite Teil laesst sich fahren, und genau das passiert hier (Regel C6):
+# zweimal dieselbe Ausgangslage, derselbe Wuerfel, zwei Kapitaene am eigenen
+# Ruder. Einer haelt den Gegner querab, der andere faehrt drauflos und feuert,
+# sobald geladen ist. Der Unterschied ist das, was ein Spieler lernen soll.
+
+## Sekunden Spielzeit, die ein Gefecht hoechstens dauern darf. Ein Gefecht
+## laeuft rund zwei Minuten - kurz genug fuer eine Sitzung, lang genug, dass
+## das Ruder darueber entscheidet.
+const DUEL_SECONDS: float = 165.0
+const DUEL_SEED: int = 4711
+## Im Zeitraffer, sonst dauert der Rauchtest so lang wie zwei echte Gefechte.
+## Der Physikschritt wird dabei mitgehoben, damit das Ruder nicht in Spruengen
+## arbeitet - 15-fache Zeit bei 120 Schritten sind 125 ms je Schritt.
+const DUEL_TIME_SCALE: float = 15.0
+const DUEL_PHYSICS_HZ: int = 120
+
+
+func _check_duel() -> void:
+	var artful := await _fight(true)
+	var reckless := await _fight(false)
+
+	_assert(artful["struck"], "Ein manoevrierter Gegner streicht die Flagge (nach %.0f s)"
+		% artful["seconds"])
+	_assert(artful["damage"] > 0, "Die eigenen Breitseiten kommen an")
+	_assert(artful["taken"] > 0, "Und der Gegner schiesst zurueck")
+	_assert(artful["damage"] > reckless["damage"],
+		"Manoevrieren richtet mehr aus als Drauflosfahren (%d gegen %d Schaden)"
+		% [artful["damage"], reckless["damage"]])
+	_assert(not reckless["struck"],
+		"Wer nur hinterherfaehrt, zwingt niemanden zur Flagge")
+
+
+## Traegt ein Gefecht aus und gibt zurueck, was dabei herauskam.
+func _fight(maneuvering: bool) -> Dictionary:
+	GameState.new_campaign("Duellant", DUEL_SEED)
+	# Wind aus Nord und fest: Ein drehender Wind waere in beiden Laeufen zwar
+	# derselbe, aber die Zahlen liessen sich nicht mehr erklaeren.
+	WorldData.set_wind(0.0, 1.0)
+	var spot := _open_sea()
+
+	var combat := NavalCombat.new()
+	add_child(combat)
+
+	var mine := _make_ship("res://resources/ships/patrol_sloop.tres")
+	mine.global_position = Vector3(spot.x, 0.0, spot.y)
+	mine.set_heading(0.0)
+	combat.setup(mine)
+	# Erst jetzt: setup() wuerfelt den Wuerfel neu.
+	combat.rng.seed = DUEL_SEED
+
+	var theirs := _make_ship("res://resources/ships/merchant_brig.tres")
+	theirs.ship_name = "Testbeute"
+	# Laengsseits steuerbord auf wirksamem Abstand, gleicher Kurs - die Lage,
+	# in der ein Gefecht tatsaechlich beginnt. Das Aufschliessen davor ist eine
+	# Frage der Geschwindigkeit, nicht des Gefechts.
+	theirs.global_position = Vector3(spot.x + Gunnery.IDEAL_RANGE, 0.0, spot.y)
+	theirs.set_heading(0.0)
+	combat.adopt(theirs)
+
+	var captain: ShipAI = null
+	if maneuvering:
+		captain = ShipAI.new()
+		captain.setup(mine)
+		captain.provoked = true
+		mine.add_child(captain)
+
+	var previous_scale := Engine.time_scale
+	var previous_hz := Engine.physics_ticks_per_second
+	Engine.physics_ticks_per_second = DUEL_PHYSICS_HZ
+	Engine.time_scale = DUEL_TIME_SCALE
+	var step := DUEL_TIME_SCALE / float(DUEL_PHYSICS_HZ)
+
+	var elapsed := 0.0
+	while elapsed < DUEL_SECONDS and not theirs.struck and not theirs.finished:
+		if captain != null:
+			captain.target = theirs
+		else:
+			_charge(mine, theirs)
+		await get_tree().physics_frame
+		elapsed += step
+
+	Engine.time_scale = previous_scale
+	Engine.physics_ticks_per_second = previous_hz
+
+	var result := {
+		"struck": theirs.struck,
+		"seconds": elapsed,
+		"damage": (theirs.max_hull - theirs.hull) + (theirs.max_sails - theirs.sails),
+		"taken": (mine.max_hull - mine.hull) + (mine.max_sails - mine.sails),
+	}
+
+	combat.queue_free()
+	mine.queue_free()
+	theirs.queue_free()
+	await get_tree().process_frame
+	return result
+
+
+## Der Kapitaen, der es noch nicht besser weiss: direkt auf den Gegner zu und
+## feuern, sobald geladen ist. Genau so faehrt man das erste Gefecht.
+func _charge(mine: Ship, theirs: Ship) -> void:
+	var bearing := SailingMath.bearing(mine.plan_position(), theirs.plan_position())
+	mine.helm_command = clampf(
+		angle_difference(mine.heading(), bearing) * ShipAI.HELM_GAIN, -1.0, 1.0
+	)
+	mine.sail_command = 3
+	mine.fire(Gunnery.PORT)
+	mine.fire(Gunnery.STARBOARD)
+
+
+## Ein Fleck offene See, weit genug von jeder Kueste fuer ein Gefecht.
+func _open_sea() -> Vector2:
+	var rng := RandomNumberGenerator.new()
+	rng.seed = DUEL_SEED
+	var half := WorldData.WORLD_SIZE * 0.45
+	for attempt in 500:
+		var spot := Vector2(rng.randf_range(-half, half), rng.randf_range(-half, half))
+		if _water_around(spot, 1200.0):
+			return spot
+	return Vector2.ZERO
+
+
+func _water_around(center: Vector2, radius: float) -> bool:
+	for i in 12:
+		var angle := TAU * float(i) / 12.0
+		for factor: float in [0.5, 1.0]:
+			var probe := center + Vector2(sin(angle), cos(angle)) * radius * factor
+			if not WorldData.is_navigable(probe.x, probe.y):
+				return false
+	return WorldData.is_navigable(center.x, center.y)
 
 
 func _check_everything_loads() -> void:

@@ -4,7 +4,7 @@ Ein Piraten-Sandbox-Spiel in der Tradition von *Sid Meier's Pirates!*, gebaut mi
 3D-Präsentation im Stil des 2004er-Remakes, prozedural erzeugte Karibik, eigene Systeme statt
 originalgetreuem Nachbau.
 
-**Status:** M2 abgeschlossen · **Engine:** Godot 4.7.1 stable · **Sprache:** GDScript
+**Status:** M4 abgeschlossen · **Engine:** Godot 4.7.1 stable · **Sprache:** GDScript
 
 ---
 
@@ -118,18 +118,23 @@ Startet nahtlos aus dem Segeln, kein Ladebildschirm, kein separates Kampfareal.
 
 - **Manöver schlägt Feuerkraft.** Ziel ist, den Gegner in die eigene Breitseite zu bekommen und
   seiner auszuweichen. Wind bleibt aktiv und ist die Hauptvariable.
-- **Munitionstypen** als taktische Wahl:
-  | Typ | Wirkung | Einsatz |
-  |---|---|---|
-  | Rundkugel | Rumpfschaden | Versenken |
-  | Kettenkugel | Segel/Takelage | Gegner bewegungsunfähig machen |
-  | Kartätsche | Mannschaft | Vor dem Entern, Crew dezimieren |
+- **Die Entfernung entscheidet, was man trifft.** Auf kurze Distanz liegt die Bahn flach und
+  schlägt in die Bordwand; von weit her kommt die Kugel von oben durch die Takelage. Daraus
+  folgt die Entscheidung, die man im Gefecht dauernd trifft: Abstand halten und die Segel
+  zerlegen, oder rangehen und den Rumpf brechen.
 - **Schadensmodell** an drei Werten statt einer HP-Leiste: **Rumpf** (Sinken), **Segel**
   (Geschwindigkeit), **Mannschaft** (Nachladezeit + Enterstärke). Ein Schiff, das du versenkst,
-  bringt keine Beute — wer reich werden will, entert.
-- **Nachladen** dauert; Salve vs. Einzelfeuer als Entscheidung.
+  bringt keine Beute — wer reich werden will, zwingt den Gegner zur Flagge.
+- **Nachladen** dauert neun Sekunden je Seite. Die andere Breitseite ist der Grund zu wenden.
 
-### 3.3 Hafen
+> **Abweichung vom ursprünglichen Konzept:** Hier standen einmal drei Munitionstypen
+> (Rundkugel, Kettenkugel, Kartätsche). Sie hätten dasselbe geleistet wie die Entfernung —
+> Rumpf, Takelage oder Mannschaft treffen — aber über ein Menü statt über das Ruder. Die
+> Entfernung ist die bessere Wahl: Sie kostet keine Bedienung, sie ist im Bild sichtbar,
+> und sie belohnt Manövrieren statt Vorausplanung. Munitionstypen bleiben als spätere
+> Verfeinerung möglich (Tier 2), sind aber kein Teil des Kerns mehr.
+
+### 3.3 Hafen### 3.3 Hafen
 
 Kein 3D-Rundgang durch die Stadt (Scope!), sondern eine **stimmungsvolle 2D/UI-Szene**: gemaltes
 Hafenpanorama im Hintergrund, davor Gebäude als anklickbare Orte.
@@ -138,6 +143,7 @@ Hafenpanorama im Hintergrund, davor Gebäude als anklickbare Orte.
 |---|---|
 | **Markt** | Waren kaufen/verkaufen, Preise abhängig von lokalem Angebot/Nachfrage |
 | **Werft** | Reparatur, Umbau (Kanonen, Laderaum, Segel), Schiffskauf/-verkauf |
+| **Werft (vorläufig)** | Auch Anheuern — gehört in die Taverne, steht aber schon hier, weil ein Gefecht seit M4 Leute kostet |
 | **Taverne** | Crew anheuern, Gerüchte hören, Offiziere rekrutieren |
 | **Gouverneurspalast** | Aufträge der Nation, Kaperbriefe, Beförderungen, Landbesitz |
 | **Hehler** *(nur bei schlechtem Ruf)* | Beute ohne Fragen verkaufen, schlechterer Kurs |
@@ -522,7 +528,40 @@ Jede Stadt führt **jede** Ware, auch die, die sie weder erzeugt noch braucht �
 sie dafür ein leeres Lager, und ein leeres Lager heißt Höchstpreis. Man hätte Holz an
 jedes Dorf zum Doppelten verkaufen können.
 
-### 7.8 Ordnerstruktur
+### 7.8 Das Gefecht — drei Zahlen, die der Spieler beeinflusst
+
+Ob eine Kugel trifft, hängt an **Lage, Entfernung und Mannschaft**. Nichts davon ist
+versteckt, und alle drei stehen im Bild.
+
+```
+Lage        = 1 - Winkel_zu_querab / 70°        0 bei Bug und Heck, 1 genau querab
+Entfernung  = 1 bis 150 m, danach fallend bis 0,18 auf 420 m
+Mannschaft  = Anteil der verbliebenen Leute, mindestens 0,4
+Treffer     = 0,60 × Lage × Entfernung × Mannschaft      je Rohr
+```
+
+**Der Feuerbereich ist die Regel, die alles trägt.** Wer dem Gegner ins Heck fällt, kann
+nicht schießen. Deshalb wird manövriert statt hinterhergefahren, und deshalb zeigt das HUD
+für jede Breitseite an, ob sie *lädt*, *bereit* ist oder *anliegt* — die Anzeige leuchtet
+genau dann auf, wenn ein Schuss auch ankäme.
+
+**Das Ergebnis steht fest, bevor die Kugel fliegt.** Eine Breitseite wird im Moment des
+Abfeuerns ausgewürfelt; die Kugeln fliegen danach nur noch die Bahn zu einem Ausgang, der
+schon feststeht. Das hat zwei Gründe: Die Ballistik lässt sich so ohne Szene prüfen, und
+es braucht keine Kollisionskörper für ein Dutzend Geschosse zwischen zwei fahrenden Zielen.
+
+**Aufgeben statt Sinken.** Unter 30 % Rumpf streicht ein Kapitän die Flagge — bei einem
+gefürchteten Gegner früher. Erst dann gibt es Beute. Wer weiter auf den Rumpf schießt,
+versenkt seine eigene Prise: Ladung und Kasse gehen mit unter. Das ist der Preis für den
+kurzen Weg, und der Grund, warum sich Fernbeschuss auf die Takelage lohnt.
+
+**Die KI verfolgt einen Platz, nicht den Gegner.** Ein Kapitän fährt nicht auf das
+gegnerische Schiff zu, sondern auf einen Punkt längsseits davon. Wer den Gegner selbst
+ansteuert, landet in seinem Kielwasser — dort liegt kein Rohr an, und beide fahren bis zum
+Sonnenuntergang geradeaus. Genau das ist im ersten Probelauf passiert: achtzig Sekunden
+Gefecht, sieben Punkte Schaden.
+
+### 7.9 Ordnerstruktur
 
 ```
 PirateGame/
@@ -549,6 +588,10 @@ PirateGame/
 │   ├── island_builder.gd
 │   ├── town_placer.gd
 │   ├── chunk_manager.gd
+│   ├── combat/
+│   │   ├── gunnery.gd          Ballistik, ohne Nodes
+│   │   ├── naval_combat.gd     Begegnungen, Breitseiten, Prisen
+│   │   └── cannon_ball.gd      Kugeln, Rauch, Fontänen
 │   └── ocean/
 │       ├── ocean.tscn
 │       └── ocean.gdshader
@@ -604,12 +647,12 @@ Andocken, Hafen-Szene, Markt mit Preisen, Werft für Reparatur, Gold-Wirtschaft.
 > **Fertig, wenn:** Du günstig kaufen, woanders teuer verkaufen und dein Schiff reparieren kannst.
 > **Ab hier existiert eine Gameplay-Schleife.**
 
-### M4 — Seekampf *(4–6 Wochen)*  ← als Nächstes
+### M4 — Seekampf ✅
 Kanonen, Geschosse, Trefferzonen, Schadensmodell, Schiffs-KI (Verfolgen, Manövrieren, Feuern,
 Fliehen), Beute.
 > **Fertig, wenn:** Ein Gefecht gegen ein KI-Schiff spannend ist und Manövrieren belohnt wird.
 
-### M5 — Entern & Progression *(4–5 Wochen)*
+### M5 — Entern & Progression *(4–5 Wochen)*  ← als Nächstes
 Taktisches Enter-Gefecht, Crew, Schiffsklassen, Schiffskauf, Speichern/Laden.
 > **Fertig, wenn:** Ein kompletter Aufstieg vom Startschiff zu einem größeren Schiff spielbar ist.
 
@@ -618,7 +661,7 @@ Ruf, Kaperbriefe, Nationen-Beziehungen, Gouverneurs-Aufträge, Kopfgeldjäger, T
 > **Fertig, wenn:** Deine Taten spürbare Folgen in der Welt haben.
 
 ### M7+ — Signature Features & Politur
-Wirtschaft, Flotte, Basis, Wetter, Audio, Export.
+Wirtschaft, Flotte, Basis, Wetter, **Meeresoptik** (siehe Abschnitt 11), Audio, Export.
 
 **Realistische Gesamteinschätzung:** M0–M6 sind grob **6–9 Monate Teilzeit** bis zu einem runden,
 vorzeigbaren Spiel. Das ist kein Grund zur Sorge — es ist die normale Größenordnung. Es ist nur
@@ -716,21 +759,129 @@ der Segelmodus schreibt die Werte beim Start ins Schiff. Wellenbild in
 `world/ocean/ocean_waves.gd` (Konstanten dort und im Shader gemeinsam ändern).
 Preisbildung in `world/economy/trade_math.gd`, Warenpreise in `resources/cargo/*.tres`.
 
+**M4 abgeschlossen.** Auf der See sind fremde Segel unterwegs: Handelsschiffe, die
+fliehen, und Patrouillen, die angreifen. Q und E geben Breitseiten ab, jede Seite lädt
+neun Sekunden. Rumpf, Takelage und Mannschaft nehmen getrennt Schaden; zerschossene
+Segel kosten Fahrt, fehlende Leute Ladezeit und Treffsicherheit. Unter 30 % Rumpf
+streicht der Gegner die Flagge und lässt sich mit der Leertaste aufbringen. Der
+Rauchtest fährt die Abnahmebedingung: dieselbe Ausgangslage zweimal, derselbe Würfel,
+einmal mit einem Kapitän, der den Gegner querab hält, und einmal mit einem, der
+drauflosfährt — **158 gegen 25 Punkte Schaden**, und nur der erste zwingt den Gegner zur
+Flagge.
+
+Die Werft heuert seit M4 auch an. Das gehört eigentlich in die Taverne (M6), musste aber
+vorgezogen werden: Ein Gefecht kostet Mannschaft, fehlende Leute kosten Ladezeit und
+Treffsicherheit, und ohne Weg zurück fährt man nach zwei Gefechten dauerhaft mit halber
+Besatzung. Eine Sackgasse ohne Ausweg ist kein System, sondern ein Fehler.
+
+Zwei Entwurfsentscheidungen sind wichtiger als die Zahlen:
+
+- **Die Entfernung ersetzt die Munitionstypen.** Nah bricht der Rumpf, fern fällt die
+  Takelage. Das gibt dieselbe Entscheidung wie Rundkugel gegen Kettenkugel, aber über das
+  Ruder statt über ein Menü — und man sieht es im Bild statt in einer Anzeige.
+- **Wer versenkt, verliert die Beute.** Ladung und Kasse gehen mit unter. Deshalb lohnt
+  es sich, aus der Entfernung die Segel zu zerlegen und den Gegner dann zu stellen, statt
+  ihn kurz und klein zu schießen.
+
+Drei Fehler, die erst das Fahren und Rendern gezeigt hat:
+
+- **Der Verfolger fuhr ins Kielwasser.** Wer auf den Gegner selbst zuhält, landet hinter
+  ihm, und hinter ihm liegt kein Rohr an. Achtzig Sekunden Gefecht, sieben Punkte
+  Schaden. Die KI steuert jetzt einen Punkt *neben* dem Gegner an, nicht ihn selbst.
+- **Der Feuerbereich war zu eng.** 50 Grad um querab klang taktisch; durch dieses Fenster
+  passt keine Verfolgungskurve. Bei 70 Grad bleiben Bug und Heck weiterhin leer — worauf
+  es ankommt —, aber ein Gefecht kommt zustande.
+- **Das Gefecht war unsichtbar.** Die Heckkamera zeigt nach vorn, geschossen wird querab.
+  Im HUD stand „Zeelandia · 180 m", auf dem Bildschirm war offene See. Die Kamera rahmt
+  jetzt beide Schiffe ein, sobald ein Gegner in Schussweite kommt.
+
+Der erste Mündungsrauch war außerdem so groß und undurchsichtig, dass das eigene Schiff
+hinter der eigenen Breitseite verschwand.
+
+Stellschrauben fürs Gefecht in `world/combat/gunnery.gd` (Feuerbereich, Reichweite,
+Trefferzonen, Aufgeben), fürs Verhalten der Gegner in `entities/ship/ship_ai.gd`, für
+Begegnungen und Beute in `world/combat/naval_combat.gd`, für die Schiffe selbst in
+`resources/ships/*.tres`.
+
 ---
 
 ## 11. Nächste Schritte
 
-1. **Spielen.** `godot --path .` starten, „Neue Kampagne“, zum nächsten Hafen segeln,
-   Leertaste. Kaufen, was grün ist. Zum nächsten Hafen. Verkaufen, was grün ist. Das ist
-   die Schleife — sie muss sich lohnen und lesbar sein, bevor Kanonen dazukommen.
-2. **Beurteilen, ob die Wirtschaft trägt.** Sind die Wege zu lang? Ist der Gewinn zu
-   klein oder zu groß? Stellschrauben: `TradeMath.SPREAD` (Handelsspanne),
-   `SCARCITY_EXPONENT` (wie stark Knappheit durchschlägt), die Basispreise in
-   `resources/cargo/*.tres` und `GameState.MINUTES_PER_SECOND` (Reisezeit).
-3. **`godot --headless --path . res://tests/world_report.tscn`** zeigt für eine
-   Beispielstadt alle zwölf Preise nebeneinander — schneller als im Spiel nachzusehen.
-4. **Erst danach M4** — Seekampf. Vorher sollte sich Handeln lohnen, sonst gibt es keinen
-   Grund, ein Schiff zu verteidigen.
+0. **F3 drücken.** Das Debug-Menü dreht Wind, Fahrt und Begegnungen direkt — damit lassen
+   sich die folgenden Fragen in Minuten beantworten statt in Stunden. „Segel setzen" holt
+   sofort einen Gegner heran, statt auf ein zufälliges Treffen zu warten.
+1. **Spielen — und zwar kämpfen.** `godot --path .` starten, „Neue Kampagne", segeln, bis
+   ein fremdes Segel auftaucht. Längsseits gehen, Q oder E drücken, wenn die Anzeige
+   „liegt an" zeigt. Zwei Fragen entscheiden über M4: Dauert ein Gefecht zu lang? Und
+   merkt man, dass das Ruder mehr bringt als das Feuer?
+2. **Stellschrauben, falls nicht.** `Gunnery.RELOAD_SECONDS` (Takt des Gefechts),
+   `Gunnery.FIRING_ARC` (wie streng die Lage sein muss), `Gunnery.BASE_ACCURACY` und
+   `HULL_DAMAGE` (wie schnell es vorbei ist), `Gunnery.STRIKE_HULL` (wann aufgegeben
+   wird), `NavalCombat.SPAWN_INTERVAL` (wie oft überhaupt jemand kommt).
+3. **`godot --path . res://tests/capture_battle.tscn`** rendert ein Gefecht in fünf
+   Aufnahmen — schneller als eines zu suchen, wenn es nur um die Darstellung geht.
+4. **Erst danach M5** — Entern und Progression. Dann wird aus einer gestrichenen Flagge
+   ein Deckgefecht und aus einer Prise ein besseres Schiff. Vorher sollte sich das
+   Gefecht selbst gut anfühlen, denn M5 baut vollständig darauf auf.
+
+Offen aus M4, bewusst zurückgestellt:
+
+- Der Ruf hat noch keine Folge. Prisen kosten Ansehen und bringen Berüchtigtheit, aber
+  niemand reagiert darauf — das ist M6.
+- Ein verlorenes Gefecht nimmt Gold und Ladung und setzt den Rumpf auf ein Viertel. Das
+  ist ein Platzhalter: Mit M5 gehört dorthin ein Deckgefecht und danach die Entscheidung
+  über Schiff und Mannschaft.
+- Die KI flieht stur vom Gegner weg und nimmt in Kauf, dabei in den Wind gedrängt zu
+  werden. Wer die Luvposition hält, kann jede Beute stellen. Das ist ein System zum
+  Durchschauen und vorerst kein Fehler.
+
+### Vorgemerkt: Überarbeitung der Meeresoptik
+
+Licht, Schatten und Wellen wiederholen sich sichtbar wie ein Schachbrett. Das ist kein
+Zufallsfehler, sondern folgt direkt aus der Formel in `world/ocean/ocean_waves.gd` und
+`world/ocean/ocean.gdshader` — vier Ursachen, die sich überlagern:
+
+1. **Ein echtes Gitternetz liegt darüber.** Der Shader zeichnet mit `grid_size = 30.0` und
+   `grid_strength = 0.07` alle 30 Meter eine weltfeste Linie. Das war eine Lernhilfe aus M1,
+   um Fahrt und Drift sichtbar zu machen — im Shader steht seit damals „für die fertige
+   Optik später auf 0.0 setzen". Das ist der buchstäbliche Teil des Schachbretts und mit
+   einer Zahl erledigt. Im Debug-Menü (F3) lässt sich das Gitter abschalten, um zu sehen,
+   wieviel davon es ausmacht.
+
+2. **Die Wellen laufen entlang der Achsen.** Die vier Lagen sind `sin(x)`, `sin(z)`,
+   `sin(x+z)` und `sin(x−z)` — also zwei achsenparallele und zwei diagonale Richtungen,
+   sonst nichts. Eine Summe aus `sin(x)` und `sin(z)` erzeugt zwangsläufig ein rechtwinkliges
+   Gitter aus Bergen und Tälern: den Eierkarton. Echte Dünung kommt aus vielen Richtungen,
+   die zueinander schief stehen.
+
+3. **Alle Frequenzen sind rationale Vielfache voneinander** (1.0, 1.30, 0.70, 3.10). Damit
+   hat das gesamte Feld eine endliche Wiederholung — es kachelt exakt, nur mit größerer
+   Kantenlänge als die einzelne Welle. Irrationale Verhältnisse (oder eine fünfte Lage mit
+   krummem Faktor) verschieben die Wiederholung weit über die Sichtweite hinaus.
+
+4. **Die Beleuchtung erbt das Muster.** Die Normale entsteht aus finiten Differenzen
+   derselben Funktion, also glänzt die See auf genau demselben Gitter. Bei einer einzigen
+   gerichteten Lichtquelle sind die Glanzstellen dadurch regelmäßig gereiht.
+
+Was eine Überarbeitung angehen müsste, grob nach Wirkung je Aufwand:
+
+- Gitternetz aus, `grid_strength = 0.0` (eine Zeile)
+- Sechs bis acht Lagen mit **gedrehten** Richtungen statt Achsen und Diagonalen, Winkel und
+  Frequenzen aus einer festen Tabelle mit krummen Verhältnissen
+- **Gerstner** statt reiner Sinus: Wellen bekommen spitze Kämme und flache Täler, was das
+  regelmäßige Auf und Ab optisch bricht
+- Feine Kräuselung über eine Normal-Map oder eine Rauschfunktion — sie muss die *Höhe* nicht
+  verändern und darf deshalb allein im Shader stehen
+- Schaum an den Kämmen und ein Fresnel-Anteil, damit die See nicht überall gleich hell ist
+
+**Achtung bei jeder dieser Änderungen:** Die Formel existiert doppelt und muss doppelt
+geändert werden — `OceanWaves.height_at()` und `swell()` im Shader müssen exakt dieselbe
+Höhe liefern, sonst reitet das Schiff nicht mehr auf der See, die es sieht (Regel B4). Die
+Kräuselung ist die einzige Ausnahme: Was den Rumpf nicht hebt, gehört nur in den Shader.
+
+Prüfen lässt sich das mit `godot --path . res://tests/capture_sailing.tscn` und
+`res://tests/capture_island.tscn` — letzteres zeigt die Küste auch ohne Wasser und im
+Drahtgitter.
 
 ### Empfohlene Lernquellen
 - **Godot Docs — "Your first 3D game"**: der offizielle Einstieg, sehr gut gepflegt

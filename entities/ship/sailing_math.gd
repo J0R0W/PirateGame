@@ -24,6 +24,11 @@ const IRONS_LIMIT: float = 30.0
 const CLOSE_HAULED_LIMIT: float = 60.0
 const BROAD_REACH_LIMIT: float = 150.0
 
+## Sicherheitsabstand beim Anlegen eines fahrbaren Kurses, in Grad. Genau auf
+## der Grenze entscheidet sonst das letzte Bit einer Fliesskommazahl darueber,
+## ob das Segel zieht oder killt.
+const POINTING_MARGIN: float = 2.0
+
 ## Weltrichtung zu einem Navigationswinkel, in der XZ-Ebene.
 static func direction(navigation_angle: float) -> Vector2:
 	return Vector2(sin(navigation_angle), -cos(navigation_angle))
@@ -83,3 +88,23 @@ static func approach(current: float, target: float, inertia: float, delta: float
 	if inertia <= 0.0:
 		return target
 	return lerpf(current, target, 1.0 - exp(-delta / inertia))
+
+
+## Peilung von einem Punkt zum anderen, als Navigationswinkel.
+static func bearing(from: Vector2, to: Vector2) -> float:
+	return angle_of(to - from)
+
+
+## Der naechstgelegene Kurs, den ein Segler tatsaechlich fahren kann.
+##
+## Wer in den Sperrsektor steuert, bleibt stehen. Ein Kapitaen faehrt deshalb
+## nie den kuerzesten Weg zum Ziel, sondern den kuerzesten fahrbaren: knapp am
+## Wind, auf der Seite, die dem Wunschkurs naeher liegt. Wer flieht und dabei
+## in den Wind gedraengt wird, verliert Fahrt - das ist beabsichtigt und der
+## Grund, warum die Luvposition im Gefecht etwas wert ist.
+static func sailable_heading(desired: float, wind_direction: float) -> float:
+	var offset := angle_difference(wind_direction, desired)
+	var limit := deg_to_rad(CLOSE_HAULED_LIMIT + POINTING_MARGIN)
+	if absf(offset) >= limit:
+		return desired
+	return wrapf(wind_direction + (limit if offset >= 0.0 else -limit), -PI, PI)

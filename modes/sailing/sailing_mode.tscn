@@ -1,4 +1,4 @@
-[gd_scene load_steps=11 format=3]
+[gd_scene load_steps=13 format=3]
 
 [ext_resource type="Script" path="res://modes/sailing/sailing_mode.gd" id="1_mode"]
 [ext_resource type="PackedScene" path="res://world/ocean/ocean.tscn" id="2_ocean"]
@@ -8,6 +8,8 @@
 [ext_resource type="PackedScene" path="res://ui/map/world_map.tscn" id="6_map"]
 [ext_resource type="Script" path="res://world/terrain/chunk_manager.gd" id="7_terrain"]
 [ext_resource type="Script" path="res://world/town/town_markers.gd" id="8_towns"]
+[ext_resource type="Script" path="res://world/combat/naval_combat.gd" id="9_combat"]
+[ext_resource type="Script" path="res://ui/debug/debug_menu.gd" id="10_debug"]
 
 [sub_resource type="ProceduralSkyMaterial" id="Sky_mat"]
 sky_top_color = Color(0.219608, 0.415686, 0.658824, 1)
@@ -50,6 +52,9 @@ script = ExtResource("7_terrain")
 [node name="Towns" type="Node3D" parent="."]
 script = ExtResource("8_towns")
 
+[node name="Combat" type="Node3D" parent="."]
+script = ExtResource("9_combat")
+
 [node name="Ocean" parent="." instance=ExtResource("2_ocean")]
 
 [node name="PlayerShip" parent="." instance=ExtResource("3_ship")]
@@ -65,3 +70,13 @@ far = 3000.0
 [node name="HUD" parent="." instance=ExtResource("5_hud")]
 
 [node name="WorldMap" parent="." instance=ExtResource("6_map")]
+
+[node name="DebugMenu" type="Control" parent="."]
+layout_mode = 3
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+mouse_filter = 2
+script = ExtResource("10_debug")

@@ -48,6 +48,7 @@ Szene, weil sie im Editor mit Live-Vorschau eingestellt werden.
 | **Land** | `SAND` `GRASS` `SCRUB` `ROCK` `PEAK` |
 | **Siedlungen** | `WALL` `ROOF` `PIER` |
 | **Schiff** | `HULL` `TIMBER` `CANVAS` |
+| **Gefecht** | `SMOKE` `IRON` |
 | **Anzeigen** | `HUD_TEXT` `HUD_DIM` `HUD_OUTLINE` `BACKDROP` `PARCHMENT` `MUTED` |
 | **Zustand** | `GOOD` `FAIR` `BAD` |
 | **Akzent** | `BRASS` (Wind, Gold, Nautisches) · `DANGER` (Warnung, Sperrsektor) |
@@ -79,6 +80,10 @@ Hintergrundflächen. Angezeigt wird nur, was zum Navigieren nötig ist.
 
 **Warum:** Panels verdecken die See. Das Spiel besteht daraus, den Horizont zu beobachten.
 
+Werkzeuge sind ausgenommen: Seekarte, Hafenbildschirm und das Debug-Menü (F3) dürfen einen
+Kasten tragen, weil sie den Blick auf die See gerade ersetzen sollen. Die Regel gilt für
+alles, was *während* der Fahrt sichtbar ist.
+
 ### A8. Systeme sichtbar machen, nicht erklären
 
 Der rote Sperrsektor im Kompass ist das Vorbild: Er zeigt ohne ein Wort, wohin man nicht
@@ -95,6 +100,20 @@ verstecken.
 **Warum:** Genau das war er zwischenzeitlich. Die Ozean-Plane reichte 450 Meter, also
 musste der Dunst dicht genug sein, ihren Rand zu verbergen — und verschluckte die Inseln
 gleich mit. Erst eine große flache Fernsee unter den Wellen hat beides entkoppelt.
+
+### A10. Die Kamera zeigt, worauf es ankommt
+
+Worauf der Spieler gerade handelt, muss im Bild sein. Die Verfolgerkamera hat dafür
+`focus`: ein zweiter Punkt, den sie mit einrahmt.
+
+**Warum:** Die erste Aufnahme eines Seegefechts zeigte offene See. Im HUD stand
+„Zeelandia · 180 m", die Anzeige meldete „Steuerbord liegt an", und zu sehen war nichts —
+denn *querab* liegt bei einer starren Heckkamera außerhalb des Bildes, und querab ist
+genau die Lage, aus der man schießt. Das Gefecht war vollständig gebaut und vollständig
+unsichtbar.
+
+Die allgemeine Form: Wo eine Regel den Spieler zwingt, etwas seitlich oder hinter sich zu
+halten, muss die Kamera davon wissen.
 
 ---
 
@@ -209,13 +228,31 @@ alles, was ihm träge folgt, mitgesetzt werden. Die Verfolgerkamera hat dafür `
 Schiff her und stand dabei sekundenlang irgendwo im Nirgendwo. Im Bild sah es aus, als
 wäre die Kamera kaputt — tatsächlich tat sie genau, was ihr aufgetragen war.
 
-### B12. Kommentare erklären das Warum
+### B12. Erst das Ergebnis, dann der Flug
+
+Wo eine Darstellung einen Ausgang zeigt, wird der Ausgang zuerst berechnet und die
+Darstellung danach darauf angesetzt — nicht umgekehrt.
+
+Eine Breitseite wird im Moment des Abfeuerns ausgewürfelt: `Gunnery.resolve_salvo()`
+liefert für jedes Rohr Treffer oder Fehlschuss, Zone und Schaden. Erst dann fliegen die
+Kugeln, und zwar zu genau diesem Ergebnis.
+
+**Warum:** Zwei Gründe, beide aus bestehenden Regeln. Der Ausgang eines Gefechts ist
+Kernlogik und gehört damit in eine Klasse ohne Nodes, die sich ohne Szene prüfen lässt
+([B3](#b3-mathematik-ohne-nodes)) — 400 Salven in Millisekunden statt 400 Gefechten in
+Echtzeit. Und ein Dutzend Geschosse mit Kollisionskörpern zwischen zwei fahrenden Zielen
+liefert Zufallstreffer, kein Schadensmodell ([B6](#b6-kein-collider-wo-eine-funktion-reicht)).
+
+Der Schaden fällt trotzdem erst, wenn die Kugel ankommt. Sonst sinkt ein Gegner, während
+die Breitseite noch in der Luft steht.
+
+### B13. Kommentare erklären das Warum
 
 Was der Code tut, steht im Code. Kommentare begründen Entscheidungen, nennen
 Größenordnungen und warnen vor Fallen. Jede Konstante, deren Wert nicht offensichtlich
 ist, bekommt einen Satz dazu.
 
-### B13. Sprache
+### B14. Sprache
 
 | Wo | Sprache |
 |---|---|
@@ -253,10 +290,22 @@ nicht auf. Deshalb gibt es zwei Sichtprüfungen, die wirklich rendern:
 | `tests/capture_island.tscn` | Küste vier Mal: normal, ohne Dunst, ohne Wasser, Drahtgitter |
 | `tests/capture_town.tscn` | Siedlung aus drei Abständen — steht sie auf dem Hang oder darüber? |
 | `tests/capture_port.tscn` | Hafenbildschirm: Markt, nach einem Kauf, Werft |
+| `tests/capture_battle.tscn` | Seegefecht: Segel in Sicht, längsseits, Breitseite, Einschlag, Prise |
+
+Das Debug-Menü (F3) baut sich im Code zusammen und hat deshalb keine `.tscn`, in der man
+die Anordnung sehen könnte — die sechste Aufnahme von `capture_sailing.tscn` ist die
+einzige Ansicht davon.
 
 Der Hafen ist reine Oberfläche und wäre der erste Kandidat, den man „kann man ja lesen"
 überspringt. Genau dort fielen Spaltenbreiten, ein rechtsbündiger Knopf und zwölf zu
 laute rote Zahlen auf.
+
+Das Gefecht hat den Punkt noch deutlicher gemacht: über dreihundert Prüfungen bestätigten die
+Ballistik, die KI und die Beute — und die erste Aufnahme zeigte leere See, weil der
+Gegner außerhalb des Bildes lag (siehe [A10](#a10-die-kamera-zeigt-worauf-es-ankommt)).
+Pulverdampf, Kugeln und Wassersäulen entstehen überhaupt erst beim Rendern; headless
+gibt es sie nicht. Der erste Mündungsrauch war so groß und undurchsichtig, dass das
+eigene Schiff hinter der eigenen Breitseite verschwand.
 
 ### C3. Die Godot-Ausgabe wird gelesen, nicht gefiltert
 
@@ -278,6 +327,13 @@ Weil man sich darauf nicht verlassen kann, prüft der Rauchtest es zusätzlich s
 
 Parameter der Weltgenerierung werden über `tests/world_report.tscn` eingestellt, nicht
 durch Probieren. Performance wird beziffert, nicht geschätzt.
+
+Für das Gefecht macht das der Rauchtest selbst. Der Feuerbereich stand zuerst bei 50 Grad,
+weil das eng und damit taktisch klang. Gefahren wurde daraus ein Verfolger, der achtzig
+Sekunden neben seiner Beute herfuhr, ohne dass je ein Rohr anlag — eine Verfolgungskurve
+passt durch dieses Fenster nicht hindurch. 70 Grad hat es gelöst, und die Zahl steht jetzt
+mit diesem Grund daneben. Genauso das Reffen im Gefecht: klang richtig, kostete ein Drittel
+Fahrt und ließ jede Beute entkommen.
 
 ### <a id="durchsetzung"></a>C5. Was automatisch geprüft wird
 

@@ -58,6 +58,13 @@ func _ready() -> void:
 	await _approach_town()
 	await _shot("05_anlegen")
 
+	# Das Debug-Menue. Es baut sich im Code zusammen, also gibt es keine Szene,
+	# in der man die Anordnung sehen koennte - nur dieses Bild.
+	var debug: DebugMenu = mode.get_node("DebugMenu")
+	debug.toggle()
+	await _wait(1.0)
+	await _shot("06_debug")
+
 	get_tree().quit(0)
 
 

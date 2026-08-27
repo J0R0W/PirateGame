@@ -13,6 +13,9 @@ extends Resource
 ## Silben fuer prozedurale Stadtnamen im Klang dieser Nation.
 @export var name_prefixes: PackedStringArray = []
 @export var name_suffixes: PackedStringArray = []
+## Schiffsnamen dieser Nation. Eigene Liste statt der Stadtsilben: Ein Segel,
+## das genauso heisst wie der Hafen dahinter, verwirrt auf der Seekarte.
+@export var ship_names: PackedStringArray = []
 
 @export_group("Verhalten")
 ## Wie aggressiv Patrouillen dieser Nation den Spieler verfolgen (0.0-1.0).

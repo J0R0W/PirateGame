@@ -1,0 +1,22 @@
+[gd_resource type="Resource" script_class="ShipClass" load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://data/ship_class.gd" id="1_ship_class"]
+
+[resource]
+script = ExtResource("1_ship_class")
+id = &"merchant_brig"
+display_name = "Handelsbrigg"
+description = "Ein schwerer Bauch mit wenig Wehr. Sie kann nicht kämpfen und weiß es — deshalb läuft sie, sobald ein fremdes Segel näher kommt."
+max_hull = 140
+max_sails = 110
+base_speed = 8.5
+turn_rate_deg = 22.0
+speed_inertia = 6.5
+turn_inertia = 1.8
+cannon_slots = 6
+cargo_capacity = 90
+min_crew = 10
+max_crew = 26
+base_price = 3800
+warship = false
+hull_scale = 1.4

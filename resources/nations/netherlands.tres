@@ -10,5 +10,6 @@ adjective = "niederländisch"
 color = Color(0.851, 0.467, 0.024, 1)
 name_prefixes = PackedStringArray("Nieuw", "Oranje", "Fort", "Sint", "Willem", "Groot", "Klein")
 name_suffixes = PackedStringArray("Amsterdam", "Zeelandia", "Haven", "Kaap", "Stad", "Baai", "Dijk", "Bergen", "Eustatius", "Rust", "Hoop", "Vrede", "Anker")
+ship_names = PackedStringArray("De Zeeleeuw", "Gouden Draak", "Batavia", "De Vliegende Mercuur", "Zwarte Zwaan", "De Hoop", "Windvang", "Prins Willem", "De Meeuw", "Zeearend")
 aggression = 0.4
 reputation_sensitivity = 0.8

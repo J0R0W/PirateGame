@@ -25,7 +25,7 @@ var gold: int = 500:
 
 var crew: int = 20:
 	set(value):
-		crew = maxi(0, value)
+		crew = clampi(value, 0, max_crew())
 		EventBus.crew_changed.emit(crew)
 
 ## Ansehen pro Nation, -100 (Feind) bis +100 (Verbuendeter).
@@ -110,6 +110,10 @@ func max_sails() -> int:
 	return ship_class.max_sails if ship_class != null else 100
 
 
+func max_crew() -> int:
+	return ship_class.max_crew if ship_class != null else 40
+
+
 func cargo_capacity() -> int:
 	return ship_class.cargo_capacity if ship_class != null else 40
 
@@ -172,7 +176,6 @@ func add_notoriety(amount: int) -> void:
 func new_campaign(captain: String, world_seed: int) -> void:
 	captain_name = captain
 	gold = 500
-	crew = 20
 	notoriety = 0
 	game_minutes = 0.0
 	_last_day = 0
@@ -184,6 +187,11 @@ func new_campaign(captain: String, world_seed: int) -> void:
 		push_error("GameState: Startschiff nicht ladbar: %s" % STARTING_SHIP)
 	hull = max_hull()
 	sails = max_sails()
+	# Voll besetzt in See stechen. Eine halbe Mannschaft laedt fast doppelt so
+	# lang und trifft halb so oft (siehe Gunnery) - damit anzufangen waere eine
+	# Strafe fuer nichts. Die Zeile steht hinter der Schiffsklasse, weil deren
+	# max_crew die Obergrenze setzt.
+	crew = max_crew()
 	cargo.clear()
 	current_port_id = -1
 
