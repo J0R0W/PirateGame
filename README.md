@@ -27,11 +27,11 @@ godot --path .
 godot --headless --path . res://tests/smoke_test.tscn
 ```
 
-331 Prüfungen: Autoloads, Eingabebelegung, Kampagnenstart, Speicher-Roundtrip,
+381 Prüfungen: Autoloads, Eingabebelegung, Kampagnenstart, Speicher-Roundtrip,
 Segelmathematik, Winkelkonvention, Wellenfeld, Schiffsgeometrie, Weltgenerierung
 (Landanteil, Weltrand, Hafenabstände, Nationsbesitz, Determinismus), Ankerplätze,
 Stadtterrassen, Siedlungen, Preisbildung, Handel, Werft, Anheuern, Ballistik,
-Trefferzonen, Schiffs-KI, Prisen, die Stellschrauben des Debug-Menüs sowie Gelände-Chunks,
+Vorhalten, Trefferentscheid, Trefferzonen, Schiffs-KI, Prisen, die Stellschrauben des Debug-Menüs sowie Gelände-Chunks,
 Grundberührung, Projektregeln und die Frage, ob überhaupt jedes Skript kompiliert.
 
 Darunter die Abnahmebedingungen der Meilensteine selbst, gefahren statt behauptet:
@@ -39,7 +39,7 @@ Darunter die Abnahmebedingungen der Meilensteine selbst, gefahren statt behaupte
 - **M3** — 20 Fass Zucker im billigsten Hafen kaufen, im teuersten verkaufen. Die Fahrt
   muss Gewinn abwerfen, die Route rückwärts Verlust.
 - **M4** — zweimal dasselbe Gefecht mit demselben Würfel, einmal mit einem Kapitän, der
-  den Gegner querab hält, einmal mit einem, der drauflosfährt. 158 gegen 25 Punkte
+  den Gegner querab hält, einmal mit einem, der drauflosfährt. 123 gegen 18 Punkte
   Schaden, und nur der erste zwingt den Gegner zur Flagge.
 
 Das Gefecht wird dabei wirklich gefahren — zwei volle Duelle im Zeitraffer, deshalb
@@ -89,6 +89,22 @@ der Atmosphäre kommt — und ob Häuser wirklich auf dem Hang stehen.
 Die Gefechtsaufnahme ist kein Luxus: Pulverdampf, fliegende Kugeln und Wassersäulen
 entstehen erst beim Rendern, und die erste zeigte offene See, weil der Gegner querab lag
 und die Kamera nach vorn sah.
+
+```bash
+godot --path . res://tests/duel.tscn              # spielen
+godot --headless --path . res://tests/duel.tscn   # messen
+```
+
+Ein Seegefecht auf Knopfdruck. **Mit Fenster** steht man laengsseits eines Gegners auf
+offener See, und es geht sofort los — kein Auslaufen, kein Warten auf ein zufälliges Segel.
+**R** setzt einen frischen Gegner, **G** wechselt seine Klasse, **H** die Ausgangslage
+(längsseits, achteraus, entgegenkommend). Jede Breitseite wird mitgeschrieben, mitsamt der
+Abweichung von querab — daran sieht man, *warum* eine Salve vorbeiging.
+
+**Ohne Fenster** fahren KI gegen KI fünfzehn Gefechte im Zeitraffer und am Ende steht eine
+Tabelle: Dauer, Salven, Trefferanteil, Schaden, Anteil der Zeit mit anliegender Breitseite,
+gestrichene Flaggen. Das ist das Messgerät für alles, was am Gefecht eingestellt wird —
+Balancewerte werden gefahren, nicht geschätzt.
 
 ## Struktur
 
@@ -144,8 +160,11 @@ auf, sobald man hinsieht.
 | Esc | Offenes Fenster schließen, sonst zurück ins Menü |
 
 Die beiden Zeilen unten in der Mitte sagen, was die Batterien tun: *lädt* mit Prozent,
-*bereit*, oder **liegt an** in Grün — dann trifft die Breitseite auch. Bug und Heck
-liegen außerhalb des Feuerbereichs; wer hinter dem Gegner herfährt, schießt ins Leere.
+*bereit*, oder **liegt an** in Grün — dann bekommen die Rohre den Gegner auch wirklich.
+Die Geschütze schwenken nur zwanzig Grad um querab: Bug und Heck bleiben leer, und wer
+schräg steht, sieht seine Salve vorbeigehen, statt getroffen zu haben. Näher heran heißt
+genauer, und ein Gegner, der sich einem zudreht, ist ein schmaleres Ziel als einer, der
+längsseits liegt.
 
 Belegt, aber noch ohne Wirkung: **F** (Fernrohr), **T** (Zeitraffer).
 

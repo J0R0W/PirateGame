@@ -8,6 +8,8 @@
 extends Node
 
 var _failures: int = 0
+## Mitgezaehlt, damit die Zahl in README.md nicht von Hand gepflegt werden muss.
+var _checks: int = 0
 
 
 func _ready() -> void:
@@ -32,6 +34,7 @@ func _ready() -> void:
 	_check_ship_model()
 	_check_heading_convention()
 	_check_gunnery()
+	_check_hit_geometry()
 	_check_salvo()
 	_check_ship_ai()
 	_check_ship_combat()
@@ -43,7 +46,9 @@ func _ready() -> void:
 	_check_code_conventions()
 	_check_everything_loads()
 
-	print("=== %s ===" % ("BESTANDEN" if _failures == 0 else "%d FEHLER" % _failures))
+	print("=== %s  (%d Pruefungen) ===" % [
+		"BESTANDEN" if _failures == 0 else "%d FEHLER" % _failures, _checks
+	])
 	get_tree().quit(1 if _failures > 0 else 0)
 
 
@@ -872,43 +877,78 @@ func _check_gunnery() -> void:
 	_assert(is_equal_approx(Gunnery.abeam(0.0, Gunnery.PORT), -PI * 0.5),
 		"Backbord liegt bei Kurs Nord im Westen")
 
-	# Die Zahl, die Manoevrieren belohnt.
-	_assert(is_equal_approx(Gunnery.bearing_quality(0.0, PI * 0.5, Gunnery.STARBOARD), 1.0),
-		"Ziel genau querab gibt volle Lage")
-	_assert(Gunnery.bearing_quality(0.0, 0.0, Gunnery.STARBOARD) == 0.0,
-		"Ziel voraus gibt keine Lage")
-	_assert(Gunnery.bearing_quality(0.0, PI, Gunnery.STARBOARD) == 0.0,
-		"Ziel achteraus gibt keine Lage")
-	_assert(Gunnery.bearing_quality(0.0, PI * 0.5, Gunnery.PORT) == 0.0,
+	# Der Schwenkbereich: enger Kegel um querab, sonst liegt kein Rohr an.
+	_assert(Gunnery.bears(0.0, PI * 0.5, Gunnery.STARBOARD), "Ziel genau querab liegt an")
+	_assert(not Gunnery.bears(0.0, 0.0, Gunnery.STARBOARD), "Ziel voraus liegt nicht an")
+	_assert(not Gunnery.bears(0.0, PI, Gunnery.STARBOARD), "Ziel achteraus liegt nicht an")
+	_assert(not Gunnery.bears(0.0, PI * 0.5, Gunnery.PORT),
 		"Die falsche Seite liegt nie an")
+	var inside := PI * 0.5 - deg_to_rad(Gunnery.TRAVERSE - 1.0)
+	var outside := PI * 0.5 - deg_to_rad(Gunnery.TRAVERSE + 1.0)
+	_assert(Gunnery.bears(0.0, inside, Gunnery.STARBOARD), "Knapp im Kegel liegt an")
+	_assert(not Gunnery.bears(0.0, outside, Gunnery.STARBOARD),
+		"Knapp ausserhalb liegt nicht mehr an")
 
+	# Die Anzeige dazu: 1.0 querab, 0.0 am Anschlag.
+	_assert(is_equal_approx(Gunnery.bearing_quality(0.0, PI * 0.5, Gunnery.STARBOARD), 1.0),
+		"Genau querab bleibt der volle Spielraum")
 	var half := Gunnery.bearing_quality(
-		0.0, PI * 0.5 - deg_to_rad(Gunnery.FIRING_ARC * 0.5), Gunnery.STARBOARD
+		0.0, PI * 0.5 - deg_to_rad(Gunnery.TRAVERSE * 0.5), Gunnery.STARBOARD
 	)
-	_assert(is_equal_approx(half, 0.5), "Halber Feuerbereich gibt halbe Lage (%.2f)" % half)
+	_assert(is_equal_approx(half, 0.5), "Halber Schwenkbereich, halber Spielraum (%.2f)" % half)
+	_assert(Gunnery.bearing_quality(0.0, 0.0, Gunnery.STARBOARD) == 0.0,
+		"Ausserhalb bleibt kein Spielraum")
 
 	_assert(Gunnery.better_side(0.0, PI * 0.5) == Gunnery.STARBOARD,
 		"Ziel im Osten liegt steuerbord")
 	_assert(Gunnery.better_side(0.0, -PI * 0.5) == Gunnery.PORT,
 		"Ziel im Westen liegt backbord")
 
-	# Entfernung: bis zur idealen Distanz volle Wirkung, danach fallend.
-	_assert(is_equal_approx(Gunnery.range_factor(50.0), 1.0), "Nahschuss trifft voll")
-	_assert(is_equal_approx(Gunnery.range_factor(Gunnery.IDEAL_RANGE), 1.0),
-		"Ideale Entfernung trifft voll")
-	_assert(Gunnery.range_factor(Gunnery.MAX_RANGE) < 0.25,
-		"Auf hoechste Entfernung trifft kaum etwas")
-	_assert(Gunnery.hit_chance(Gunnery.MAX_RANGE + 1.0, 1.0, 1.0) == 0.0,
-		"Ausser Reichweite trifft nichts")
-	_assert(Gunnery.hit_chance(100.0, 0.0, 1.0) == 0.0, "Ohne Lage trifft nichts")
+	# Richten: im Kegel auf das Ziel, ausserhalb bis zum Anschlag.
+	var tracked := Gunnery.aim_direction(0.0, inside, Gunnery.STARBOARD)
+	_assert(is_equal_approx(tracked, inside), "Im Kegel zeigen die Rohre auf das Ziel")
+	var pinned := Gunnery.aim_direction(0.0, 0.0, Gunnery.STARBOARD)
+	_assert(is_equal_approx(pinned, PI * 0.5 - deg_to_rad(Gunnery.TRAVERSE)),
+		"Ausserhalb schwenken sie bis zum Anschlag und schiessen daneben")
+	_assert(is_equal_approx(
+		Gunnery.aim_direction(0.0, PI * 0.5, Gunnery.STARBOARD), PI * 0.5
+	), "Ohne Korrektur geht die Salve genau querab")
 
-	# Mannschaft: fehlende Leute kosten Treffsicherheit und Ladezeit.
-	_assert(Gunnery.hit_chance(100.0, 1.0, 0.5) < Gunnery.hit_chance(100.0, 1.0, 1.0),
-		"Halbe Mannschaft trifft schlechter")
+	# Ein weiterer Schwenkbereich holt ein Ziel wieder herein, das eben noch
+	# ausserhalb lag - genau daran dreht ShipClass.gun_traverse.
+	_assert(Gunnery.bears(0.0, outside, Gunnery.STARBOARD, Gunnery.TRAVERSE * 2.0),
+		"Ein weiterer Schwenkbereich bekommt mehr")
+
+	# Flugzeit: sie steckt im Vorhalten, also muss sie mit der Entfernung wachsen.
+	_assert(Gunnery.flight_time(Gunnery.MAX_RANGE) > Gunnery.flight_time(Gunnery.IDEAL_RANGE),
+		"Weiter fliegen dauert laenger")
+	_assert(Gunnery.flight_time(0.0) > 0.0, "Auch ein Nahschuss braucht Zeit")
+
+	# Mannschaft: erst faehrt das Schiff, dann bedient sie die Rohre.
+	_assert(is_equal_approx(Gunnery.readiness(40, 4, 6), 1.0),
+		"Vierzig Mann bedienen sechs Rohre vollstaendig")
+	_assert(is_equal_approx(Gunnery.readiness(16, 4, 6), 1.0),
+		"Vier zum Fahren und zwoelf an den Rohren reichen genau")
+	_assert(Gunnery.readiness(10, 4, 6) < 1.0, "Zehn Mann reichen dafuer nicht")
+	_assert(is_equal_approx(Gunnery.readiness(4, 4, 6), Gunnery.MIN_READINESS),
+		"Wer nur noch fahren kann, feuert im Schneckentempo")
+	_assert(is_equal_approx(Gunnery.readiness(0, 4, 6), Gunnery.MIN_READINESS),
+		"Und tiefer geht es nicht")
+	_assert(Gunnery.readiness(30, 18, 10) < Gunnery.readiness(30, 4, 6),
+		"Mehr Rohre und mehr Mindestbesatzung heissen schlechter bedient")
+
 	_assert(Gunnery.reload_seconds(0.5) > Gunnery.reload_seconds(1.0),
-		"Halbe Mannschaft laedt langsamer")
-	_assert(is_equal_approx(Gunnery.reload_seconds(0.1), Gunnery.reload_seconds(
-		Gunnery.MIN_CREW_FACTOR)), "Ladezeit hat eine Untergrenze")
+		"Halbe Bedienung laedt langsamer")
+	_assert(is_equal_approx(Gunnery.reload_seconds(1.0), Gunnery.RELOAD_SECONDS),
+		"Volle Bedienung laedt in der Nennzeit")
+	_assert(is_equal_approx(Gunnery.reload_seconds(0.1),
+		Gunnery.reload_seconds(Gunnery.MIN_READINESS)), "Ladezeit hat eine Untergrenze")
+
+	# Fehler wachsen mit der Entfernung und mit fehlenden Leuten.
+	_assert(Gunnery.error_scale(300.0, 1.0) > Gunnery.error_scale(150.0, 1.0),
+		"Auf doppelte Entfernung wird doppelt so ungenau gezielt")
+	_assert(Gunnery.error_scale(150.0, 0.5) > Gunnery.error_scale(150.0, 1.0),
+		"Eine halbe Bedienung zielt schlechter")
 
 	# Trefferzonen: nah in den Rumpf, fern in die Takelage.
 	var close := Gunnery.zone_weights(40.0)
@@ -931,40 +971,185 @@ func _check_gunnery() -> void:
 		"Beruechtigtheit laesst frueher aufgeben")
 
 
-## Breitseiten sind Wuerfelwuerfe - geprueft wird die Verteilung, nicht ein Wurf.
-func _check_salvo() -> void:
-	var rng := RandomNumberGenerator.new()
-	rng.seed = 20260827
+## Der Trefferentscheid: ein Punkt im gedrehten Rechteck des Ziels.
+##
+## Das ist die Stelle, an der aus der Umstellung ein Spielsystem wird - wer
+## sich dem Feind zudreht, macht sich schmal.
+func _check_hit_geometry() -> void:
+	var here := Vector2.ZERO
+	# Ein Rumpf auf Nordkurs: zehn Meter lang, gut drei breit.
+	var length := 5.0
+	var beam := 1.8
 
+	_assert(Gunnery.hits_target(here, here, 0.0, length, beam), "Mittschiffs ist ein Treffer")
+	_assert(Gunnery.hits_target(Vector2(0.0, -4.9), here, 0.0, length, beam),
+		"Der Bug gehoert zum Ziel")
+	_assert(not Gunnery.hits_target(Vector2(0.0, -5.1), here, 0.0, length, beam),
+		"Knapp vor dem Bug ist keiner")
+	_assert(Gunnery.hits_target(Vector2(1.7, 0.0), here, 0.0, length, beam),
+		"Die Bordwand gehoert dazu")
+	_assert(not Gunnery.hits_target(Vector2(1.9, 0.0), here, 0.0, length, beam),
+		"Knapp daneben ist daneben")
+
+	# Dasselbe Rechteck, um 90 Grad gedreht: Was eben ein Treffer war, ist jetzt
+	# keiner mehr, und umgekehrt.
+	_assert(Gunnery.hits_target(Vector2(4.0, 0.0), here, PI * 0.5, length, beam),
+		"Quergedreht liegt die Laenge nach Osten")
+	_assert(not Gunnery.hits_target(Vector2(0.0, -4.0), here, PI * 0.5, length, beam),
+		"Und die Breite nach Norden")
+
+	# Die Aussage in Zahlen: querab ist das Ziel gut dreimal so breit im
+	# Anschlag wie mit dem Bug voran.
 	var abeam_hits := 0
 	var bow_hits := 0
-	var rounds := 400
-	for i in rounds:
-		abeam_hits += Gunnery.hits_in(Gunnery.resolve_salvo(rng, 5, 140.0, 1.0, 1.0))
-		bow_hits += Gunnery.hits_in(Gunnery.resolve_salvo(rng, 5, 140.0, 0.2, 1.0))
-	_assert(abeam_hits > bow_hits * 3,
-		"Querab trifft weit oefter als schraeg (%d gegen %d von je %d Schuss)"
-		% [abeam_hits, bow_hits, rounds * 5])
+	var samples := 200
+	for i in samples:
+		# Ein Punkt, der seitlich streut - so wie eine Salve streut.
+		var offset := -12.0 + 24.0 * float(i) / float(samples - 1)
+		# Schuetze im Westen: seine Streuung laeuft von Nord nach Sued.
+		var point := Vector2(0.0, offset)
+		if Gunnery.hits_target(point, here, 0.0, length, beam):
+			abeam_hits += 1
+		if Gunnery.hits_target(point, here, PI * 0.5, length, beam):
+			bow_hits += 1
+	_assert(abeam_hits > bow_hits * 2,
+		"Ein Schiff quer zum Schuetzen ist ein weit groesseres Ziel (%d gegen %d)"
+		% [abeam_hits, bow_hits])
 
+
+## Breitseiten: geprueft wird die Verteilung ueber viele Salven, nicht eine.
+##
+## Gewuerfelt wird nur noch das Zielen; ob getroffen wird, entscheidet danach
+## die Geometrie. Deshalb stehen hier Trefferzahlen und keine Wahrscheinlich-
+## keiten.
+func _check_salvo() -> void:
+	var rng := RandomNumberGenerator.new()
+	rng.seed = 20260831
+
+	# Ein Gegner, der auf Nordkurs querab steht, 150 Meter im Osten.
+	var target := TargetProfile.make(Vector2(Gunnery.IDEAL_RANGE, 0.0), Vector2.ZERO, 0.0, 5.0, 1.8)
+	var rounds := 300
+	var guns := 5
+
+	var abeam_hits := 0
+	var askew_hits := 0
+	for i in rounds:
+		abeam_hits += Gunnery.hits_in(Gunnery.resolve_salvo(
+			rng, guns, Vector2.ZERO, 0.0, Gunnery.STARBOARD, target, 1.0
+		))
+		# Derselbe Gegner, aber das eigene Schiff steht schraeg: Die Rohre
+		# haengen am Anschlag und die Salve geht vorbei.
+		askew_hits += Gunnery.hits_in(Gunnery.resolve_salvo(
+			rng, guns, Vector2.ZERO, deg_to_rad(50.0), Gunnery.STARBOARD, target, 1.0
+		))
+	_assert(abeam_hits > askew_hits * 5,
+		"Wer richtig liegt, trifft ungleich mehr (%d gegen %d von je %d Kugeln)"
+		% [abeam_hits, askew_hits, rounds * guns])
+	_assert(abeam_hits > rounds * guns / 2,
+		"Eine richtig gelegte Breitseite trifft mehrheitlich (%d von %d)"
+		% [abeam_hits, rounds * guns])
+
+	# Naeher heran heisst genauer - der Kern der ganzen Umstellung.
+	var near := TargetProfile.make(Vector2(60.0, 0.0), Vector2.ZERO, 0.0, 5.0, 1.8)
+	var distant := TargetProfile.make(Vector2(380.0, 0.0), Vector2.ZERO, 0.0, 5.0, 1.8)
+	var near_hits := 0
+	var distant_hits := 0
+	for i in rounds:
+		near_hits += Gunnery.hits_in(Gunnery.resolve_salvo(
+			rng, guns, Vector2.ZERO, 0.0, Gunnery.STARBOARD, near, 1.0
+		))
+		distant_hits += Gunnery.hits_in(Gunnery.resolve_salvo(
+			rng, guns, Vector2.ZERO, 0.0, Gunnery.STARBOARD, distant, 1.0
+		))
+	_assert(near_hits > distant_hits * 2,
+		"Aus der Naehe trifft es weit oefter (%d gegen %d von je %d Kugeln)"
+		% [near_hits, distant_hits, rounds * guns])
+
+	# Und eine dezimierte Mannschaft trifft schlechter, ohne dass es dafuer
+	# eine zweite Zahl braeuchte.
+	var thin_hits := 0
+	for i in rounds:
+		thin_hits += Gunnery.hits_in(Gunnery.resolve_salvo(
+			rng, guns, Vector2.ZERO, 0.0, Gunnery.STARBOARD, target, Gunnery.MIN_READINESS
+		))
+	_assert(thin_hits < abeam_hits,
+		"Halbe Bedienung trifft schlechter (%d gegen %d)" % [thin_hits, abeam_hits])
+
+	# Ein Ziel, das faehrt, muss vorgehalten werden. Ohne Vorhalten schiesst man
+	# ihm hinterher - geprueft, indem die Fahrt quer zur Schussrichtung liegt.
+	var running := TargetProfile.make(
+		Vector2(Gunnery.IDEAL_RANGE, 0.0), SailingMath.direction(0.0) * 6.0, 0.0, 5.0, 1.8
+	)
+	var lead := Gunnery.predicted_position(running, Gunnery.IDEAL_RANGE)
+	_assert(lead.distance_to(running.position) > 1.0,
+		"Auf ein fahrendes Ziel wird vorgehalten (%.1f m)" % lead.distance_to(running.position))
+	_assert(is_equal_approx(
+		Gunnery.predicted_position(target, Gunnery.IDEAL_RANGE).x, target.position.x
+	), "Auf ein stehendes Ziel wird nicht vorgehalten")
+	var running_hits := 0
+	for i in rounds:
+		running_hits += Gunnery.hits_in(Gunnery.resolve_salvo(
+			rng, guns, Vector2.ZERO, 0.0, Gunnery.STARBOARD, running, 1.0
+		))
+	_assert(running_hits > rounds * guns / 4,
+		"Ein fahrendes Ziel wird trotzdem getroffen (%d von %d)"
+		% [running_hits, rounds * guns])
+
+	# Trefferzonen am fertigen Schuss: nah bricht der Rumpf, fern faellt die
+	# Takelage.
 	var close_hull := 0
 	var close_sails := 0
 	var far_hull := 0
 	var far_sails := 0
 	for i in rounds:
-		var near_salvo := Gunnery.resolve_salvo(rng, 5, 60.0, 1.0, 1.0)
+		var near_salvo := Gunnery.resolve_salvo(
+			rng, guns, Vector2.ZERO, 0.0, Gunnery.STARBOARD, near, 1.0
+		)
 		close_hull += Gunnery.damage_in(near_salvo, Gunnery.Zone.HULL)
 		close_sails += Gunnery.damage_in(near_salvo, Gunnery.Zone.SAILS)
-		var far_salvo := Gunnery.resolve_salvo(rng, 5, 380.0, 1.0, 1.0)
+		var far_salvo := Gunnery.resolve_salvo(
+			rng, guns, Vector2.ZERO, 0.0, Gunnery.STARBOARD, distant, 1.0
+		)
 		far_hull += Gunnery.damage_in(far_salvo, Gunnery.Zone.HULL)
 		far_sails += Gunnery.damage_in(far_salvo, Gunnery.Zone.SAILS)
 	_assert(close_hull > close_sails,
-		"Aus der Nahe bricht der Rumpf (%d gegen %d Schaden)" % [close_hull, close_sails])
+		"Aus der Naehe bricht der Rumpf (%d gegen %d Schaden)" % [close_hull, close_sails])
 	_assert(far_sails > far_hull,
 		"Von weit her faellt die Takelage (%d gegen %d Schaden)" % [far_sails, far_hull])
 
-	var empty := Gunnery.resolve_salvo(rng, 4, 800.0, 1.0, 1.0)
+	# Ausser Reichweite fliegt die Salve trotzdem - sonst fehlten die Fontaenen.
+	var beyond := TargetProfile.make(Vector2(800.0, 0.0), Vector2.ZERO, 0.0, 5.0, 1.8)
+	var empty := Gunnery.resolve_salvo(
+		rng, 4, Vector2.ZERO, 0.0, Gunnery.STARBOARD, beyond, 1.0
+	)
 	_assert(Gunnery.hits_in(empty) == 0, "Ausser Reichweite trifft keine Kugel")
 	_assert(empty.size() == 4, "Auch ein Fehlschuss ist ein Schuss - fuer die Fontaene")
+
+	# Jede Kugel hat ihre eigene Muendung und ihren eigenen Aufschlagpunkt. Ohne
+	# das saehe eine Breitseite aus wie ein einziger grosser Schuss.
+	var spread_salvo := Gunnery.resolve_salvo(
+		rng, guns, Vector2.ZERO, 0.0, Gunnery.STARBOARD, target, 1.0
+	)
+	var muzzles := spread_salvo[0].origin.distance_to(spread_salvo[guns - 1].origin)
+	_assert(muzzles > Gunnery.GUN_SPACING * float(guns - 2),
+		"Die Rohre stehen ueber die Bordwand verteilt (%.1f m)" % muzzles)
+	_assert(is_equal_approx(
+		Gunnery.gun_offset(0, guns), -Gunnery.gun_offset(guns - 1, guns)
+	), "Die Batterie sitzt mittig um den Rumpfmittelpunkt")
+	for shot: Shot in spread_salvo:
+		_assert(shot.impact.distance_to(shot.origin) > 1.0,
+			"Jede Kugel fliegt wirklich los")
+
+	# Und ein Fehlschuss geht dorthin, wo man ihn sieht: neben das Ziel, nicht
+	# in eine beliebige Richtung.
+	var wide := Gunnery.resolve_salvo(
+		rng, guns, Vector2.ZERO, deg_to_rad(60.0), Gunnery.STARBOARD, target, 1.0
+	)
+	for shot: Shot in wide:
+		_assert(not shot.hit, "Am Anschlag trifft nichts")
+		var reach := shot.impact.distance_to(shot.origin)
+		_assert(absf(reach - Gunnery.IDEAL_RANGE) < Gunnery.IDEAL_RANGE * 0.35,
+			"Aber die Salve liegt auf der richtigen Entfernung (%.0f m)" % reach)
 
 
 func _check_ship_ai() -> void:
@@ -989,47 +1174,56 @@ func _check_ship_ai() -> void:
 	_assert(ShipAI.stance(true, 0.2, 300.0) == ShipAI.Stance.FLEE,
 		"Ein angeschlagenes Kriegsschiff bricht ab")
 
-	# Der Platz laengsseits: Gegner faehrt nach Norden, wir wollen ihn
-	# steuerbord haben - also gehoeren wir an seine Backbordseite.
-	var enemy_at := Vector2(Gunnery.IDEAL_RANGE, 0.0)
-	var post := ShipAI.station(enemy_at, 0.0, Gunnery.STARBOARD)
-	_assert(post.distance_to(Vector2.ZERO) < 1.0,
-		"Der Platz steuerbord liegt backbord des Gegners")
-	_assert(post.distance_to(enemy_at) < Gunnery.MAX_RANGE,
-		"Und in Schussweite")
+	# Die Bahn ins Gefecht: Der Vorhalt auf die Peilung waechst mit der Naehe,
+	# aus der Spirale wird ein Kreis um den Gegner. Gegner im Osten, wir im
+	# Ursprung - wir wollen ihn steuerbord haben.
+	var far_off := ShipAI.engage_course(Vector2.ZERO, Vector2(900.0, 0.0), Gunnery.STARBOARD)
+	_assert(absf(angle_difference(far_off, PI * 0.5)) < deg_to_rad(1.0),
+		"Weit draussen wird geradewegs auf den Gegner zugehalten")
 
-	# Steht man schon darauf, laeuft man laengsseits mit - und die Breitseite
-	# liegt an.
-	var beam := ShipAI.desired_heading(
-		ShipAI.Stance.ENGAGE, Vector2.ZERO, enemy_at, 0.0, Gunnery.STARBOARD, PI
+	var at_beam := ShipAI.engage_course(
+		Vector2.ZERO, Vector2(ShipAI.BEAM_RANGE, 0.0), Gunnery.STARBOARD
 	)
-	_assert(Gunnery.bearing_quality(beam, PI * 0.5, Gunnery.STARBOARD) > 0.9,
-		"Auf dem Platz laengsseits liegt die Breitseite an")
+	_assert(Gunnery.bears(at_beam, PI * 0.5, Gunnery.STARBOARD),
+		"Auf Gefechtsabstand liegt der Gegner querab und die Breitseite an")
 
-	# Weit draussen wird aufgeschlossen, nicht umkreist.
-	var chase := ShipAI.desired_heading(
-		ShipAI.Stance.ENGAGE, Vector2.ZERO, Vector2(900.0, 0.0), 0.0, Gunnery.STARBOARD, PI
+	var half_way := ShipAI.engage_course(
+		Vector2.ZERO,
+		Vector2((ShipAI.APPROACH_RANGE + ShipAI.BEAM_RANGE) * 0.5, 0.0),
+		Gunnery.STARBOARD
 	)
-	_assert(absf(angle_difference(chase, PI * 0.5)) < deg_to_rad(15.0),
-		"Weit draussen wird auf den Gegner zugehalten")
+	var lead_far := absf(angle_difference(far_off, PI * 0.5))
+	var lead_half := absf(angle_difference(half_way, PI * 0.5))
+	var lead_beam := absf(angle_difference(at_beam, PI * 0.5))
+	_assert(lead_far < lead_half and lead_half < lead_beam,
+		"Je naeher, desto mehr wird eingedreht (%.0f, %.0f, %.0f Grad)"
+		% [rad_to_deg(lead_far), rad_to_deg(lead_half), rad_to_deg(lead_beam)])
 
 	# Zu dicht dran wird abgedreht, statt zu rammen.
 	var sheer := ShipAI.desired_heading(
-		ShipAI.Stance.ENGAGE, Vector2.ZERO, Vector2(40.0, 0.0), 0.0, Gunnery.STARBOARD, PI
+		ShipAI.Stance.ENGAGE, Vector2.ZERO, Vector2(30.0, 0.0), Gunnery.STARBOARD, PI
 	)
 	_assert(absf(angle_difference(sheer, PI * 0.5)) > PI * 0.5,
 		"Zu nah wird abgedreht statt gerammt")
 
+	# Die Seite entscheidet, herum wo eingedreht wird - auf der anderen Seite
+	# spiegelt sich die ganze Bahn.
+	var mirrored := ShipAI.engage_course(
+		Vector2.ZERO, Vector2(ShipAI.BEAM_RANGE, 0.0), Gunnery.PORT
+	)
+	_assert(Gunnery.bears(mirrored, PI * 0.5, Gunnery.PORT),
+		"Backbord wird andersherum eingedreht")
+
 	# Wind aus Nord, Gegner im Norden: Die Flucht nach Sueden laeuft raumschots
 	# und wird deshalb nicht auf einen Anlieger gelegt.
 	var away := ShipAI.desired_heading(
-		ShipAI.Stance.FLEE, Vector2.ZERO, Vector2(0.0, -200.0), 0.0, Gunnery.PORT, 0.0
+		ShipAI.Stance.FLEE, Vector2.ZERO, Vector2(0.0, -200.0), Gunnery.PORT, 0.0
 	)
 	_assert(absf(angle_difference(away, PI)) < deg_to_rad(1.0),
 		"Wer flieht, dreht dem Gegner den Ruecken zu")
 	# Steht der Gegner in Lee, geht das nicht: Dann bleibt nur der Anlieger.
 	var upwind := ShipAI.desired_heading(
-		ShipAI.Stance.FLEE, Vector2.ZERO, Vector2(0.0, 200.0), 0.0, Gunnery.PORT, 0.0
+		ShipAI.Stance.FLEE, Vector2.ZERO, Vector2(0.0, 200.0), Gunnery.PORT, 0.0
 	)
 	_assert(absf(angle_difference(upwind, 0.0)) > deg_to_rad(SailingMath.CLOSE_HAULED_LIMIT),
 		"Flucht gegen den Wind laeuft ueber den Anlieger")
@@ -1037,13 +1231,23 @@ func _check_ship_ai() -> void:
 	_assert(ShipAI.sail_setting(ShipAI.Stance.ENGAGE, 30.0) < 3,
 		"Dicht am Gegner wird Fahrt weggenommen")
 	_assert(ShipAI.sail_setting(ShipAI.Stance.ENGAGE, 200.0) == 3,
-		"Im Gefecht selbst steht alles - wer reffft, wird abgehaengt")
+		"Im Gefecht selbst steht alles - wer refft, wird abgehaengt")
 	_assert(ShipAI.sail_setting(ShipAI.Stance.FLEE, 400.0) == 3,
 		"Auf der Flucht ebenso")
-	_assert(not ShipAI.should_fire(0.1, 100.0), "Ohne Lage wird nicht gefeuert")
-	_assert(not ShipAI.should_fire(1.0, Gunnery.MAX_RANGE + 50.0),
-		"Ausser Reichweite wird nicht gefeuert")
-	_assert(ShipAI.should_fire(1.0, 100.0), "Mit Lage und in Reichweite wird gefeuert")
+
+	# Gefeuert wird genau dann, wenn die Rohre den Gegner bekommen - seit sie
+	# wirklich dorthin zeigen, gibt es dazwischen nichts mehr abzuwaegen.
+	_assert(not ShipAI.should_fire(0.0, 0.0, Gunnery.STARBOARD, 100.0, Gunnery.TRAVERSE),
+		"Auf ein Ziel voraus wird nicht gefeuert")
+	_assert(ShipAI.should_fire(0.0, PI * 0.5, Gunnery.STARBOARD, 100.0, Gunnery.TRAVERSE),
+		"Liegt das Ziel an und ist es in Reichweite, faellt die Breitseite")
+	# Und nicht auf jede Entfernung, auf die die Kugel noch traegt: Eine Salve
+	# ins Leere kostet neun Sekunden Nachladen.
+	_assert(not ShipAI.should_fire(
+		0.0, PI * 0.5, Gunnery.STARBOARD, ShipAI.FIRE_RANGE + 10.0, Gunnery.TRAVERSE
+	), "Auf zu grosse Entfernung wird das Pulver gespart")
+	_assert(ShipAI.FIRE_RANGE < Gunnery.MAX_RANGE,
+		"Und diese Grenze liegt innerhalb der Schussweite")
 
 
 ## Das Schiff als Node: Zaehigkeit, Batterien, Schaden.
@@ -1069,10 +1273,18 @@ func _check_ship_combat() -> void:
 	_assert(shredded < full * 0.6, "Zerschossene Takelage kostet Fahrt (%.1f statt %.1f kn)"
 		% [shredded, full])
 
+	_assert(is_equal_approx(ship.readiness(), 1.0),
+		"Voll besetzt sind alle Rohre bedient")
+	_assert(is_equal_approx(ship.handling(), 1.0), "Und das Schiff faehrt voll")
+
 	ship.take_hit(Gunnery.Zone.CREW, 40)
 	_assert(ship.crew < ship.max_crew, "Kartaetschen kosten Leute")
-	_assert(Gunnery.reload_seconds(ship.crew_fraction()) > Gunnery.RELOAD_SECONDS,
+	_assert(ship.readiness() < 1.0, "Und damit die Bedienung der Rohre")
+	_assert(Gunnery.reload_seconds(ship.readiness()) > Gunnery.RELOAD_SECONDS,
 		"Und damit Ladezeit")
+	# Sechs von achtzehn Mann: Das Schiff kriecht noch, faehrt aber nicht mehr.
+	_assert(ship.handling() < 1.0, "Unter der Mindestbesatzung leidet auch die Fahrt")
+	_assert(ship.handling() >= Ship.MIN_HANDLING, "Ganz stehen bleibt es aber nicht")
 
 	ship.strike()
 	_assert(ship.struck, "Ein Schiff kann die Flagge streichen")
@@ -1158,6 +1370,9 @@ func _check_prize() -> void:
 	GameState.cargo.clear()
 
 	var combat := NavalCombat.new()
+	# Keine zufaelligen Segel dazwischen: Ein drittes Schiff waehrend des Duells
+	# verschiebt die Zahlen und macht zwei Laeufe unvergleichbar.
+	combat.max_ships = 0
 	add_child(combat)
 
 	var mine := _make_ship("res://resources/ships/sloop.tres")
@@ -1274,6 +1489,9 @@ func _run_ship(multiplier: float) -> float:
 ## Hoechstzahl und Sofort-Segel.
 func _check_spawn_knobs() -> void:
 	var combat := NavalCombat.new()
+	# Keine zufaelligen Segel dazwischen: Ein drittes Schiff waehrend des Duells
+	# verschiebt die Zahlen und macht zwei Laeufe unvergleichbar.
+	combat.max_ships = 0
 	add_child(combat)
 
 	var mine := _make_ship("res://resources/ships/sloop.tres")
@@ -1362,12 +1580,17 @@ func _check_duel() -> void:
 ## Traegt ein Gefecht aus und gibt zurueck, was dabei herauskam.
 func _fight(maneuvering: bool) -> Dictionary:
 	GameState.new_campaign("Duellant", DUEL_SEED)
-	# Wind aus Nord und fest: Ein drehender Wind waere in beiden Laeufen zwar
-	# derselbe, aber die Zahlen liessen sich nicht mehr erklaeren.
-	WorldData.set_wind(0.0, 1.0)
+	# Wind querab und fest. Fest, weil ein drehender Wind in beiden Laeufen zwar
+	# derselbe waere, die Zahlen aber nicht mehr erklaerbar. Und querab statt aus
+	# Nord, weil beide Schiffe auf Nordkurs starten: Aus Nord laegen sie in Irons
+	# und das "Gefecht" waere ein Gefecht zweier Schiffe, die sich kaum bewegen.
+	WorldData.set_wind(deg_to_rad(90.0), 1.0)
 	var spot := _open_sea()
 
 	var combat := NavalCombat.new()
+	# Keine zufaelligen Segel dazwischen: Ein drittes Schiff waehrend des Duells
+	# verschiebt die Zahlen und macht zwei Laeufe unvergleichbar.
+	combat.max_ships = 0
 	add_child(combat)
 
 	var mine := _make_ship("res://resources/ships/patrol_sloop.tres")
@@ -1377,8 +1600,12 @@ func _fight(maneuvering: bool) -> Dictionary:
 	# Erst jetzt: setup() wuerfelt den Wuerfel neu.
 	combat.rng.seed = DUEL_SEED
 
-	var theirs := _make_ship("res://resources/ships/merchant_brig.tres")
-	theirs.ship_name = "Testbeute"
+	# Ein Kriegsschiff, kein Handelsschiff: Eine Handelsbrigg flieht, und eine
+	# Verfolgung ueber mehrere Minuten sagt nichts darueber aus, ob Manoevrieren
+	# etwas bringt - sie sagt nur, wer schneller ist. Gegen einen Gegner, der
+	# selbst das Gefecht sucht, entscheidet die Lage.
+	var theirs := _make_ship("res://resources/ships/patrol_sloop.tres")
+	theirs.ship_name = "Testgegner"
 	# Laengsseits steuerbord auf wirksamem Abstand, gleicher Kurs - die Lage,
 	# in der ein Gefecht tatsaechlich beginnt. Das Aufschliessen davor ist eine
 	# Frage der Geschwindigkeit, nicht des Gefechts.
@@ -1802,6 +2029,7 @@ func _check_ship_model() -> void:
 
 
 func _assert(condition: bool, label: String) -> void:
+	_checks += 1
 	if condition:
 		print("  ok    %s" % label)
 	else:

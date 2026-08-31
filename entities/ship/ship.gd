@@ -46,6 +46,11 @@ signal sunk()
 @export_group("Gefecht")
 ## Rohre je Breitseite.
 @export var cannons_per_side: int = 3
+## Rohre insgesamt. Beide Batterien laden gleichzeitig, also braucht auch jede
+## ihre eigene Bedienung - siehe [method Gunnery.readiness].
+@export var cannon_slots: int = 6
+## Schwenkbereich der Rohre um querab, in Grad nach jeder Seite.
+@export var gun_traverse: float = Gunnery.TRAVERSE
 
 @export_group("Steuerung")
 ## Nimmt dieses Schiff Tastatureingaben entgegen?
@@ -85,6 +90,9 @@ var max_sails: int = 100
 var sails: int = 100
 var max_crew: int = 40
 var crew: int = 20
+## Soviele Leute haelt das Schiff ueberhaupt in Fahrt. Erst was darueber
+## hinausgeht, bedient die Geschuetze.
+var min_crew: int = 8
 
 ## Flagge gestrichen - das Schiff ergibt sich und wartet auf den Prisenkommando.
 var struck: bool = false
@@ -111,6 +119,11 @@ const HEEL_DEGREES: float = 7.0
 
 ## Wie schnell ein gestrichenes Schiff aufstoppt, in Sekunden.
 const STRIKE_STOP_INERTIA: float = 3.0
+
+## Soweit faellt die Fahrt hoechstens, wenn die Mannschaft unter die Mindest-
+## besatzung sinkt. Nicht auf null: Ein manoevrierunfaehiges Wrack, das nur
+## noch treibt, waere eine Sackgasse statt einer Niederlage.
+const MIN_HANDLING: float = 0.3
 
 ## Restliche Nachladezeit je Seite, Index 0 = Backbord, 1 = Steuerbord.
 var _reload: PackedFloat32Array = PackedFloat32Array([0.0, 0.0])
@@ -153,7 +166,7 @@ func _physics_process(delta: float) -> void:
 		heading(),
 		WorldData.wind_direction,
 		WorldData.wind_strength,
-		SailingMath.SAIL_STEPS[sail_step] * sail_health()
+		SailingMath.SAIL_STEPS[sail_step] * sail_health() * handling()
 	)
 	# Wer die Flagge gestrichen hat, faehrt nicht mehr - er dreht bei.
 	if struck:
@@ -264,12 +277,15 @@ func apply_class(source: ShipClass) -> void:
 	max_hull = source.max_hull
 	max_sails = source.max_sails
 	max_crew = source.max_crew
+	min_crew = source.min_crew
 	hull = max_hull
 	sails = max_sails
 	crew = source.max_crew
 	# Ein Schiff mit vier Rohren hat zwei je Seite. Ungerade Zahlen fallen
 	# zugunsten des Spielers auf - eine halbe Kanone gibt es nicht.
+	cannon_slots = source.cannon_slots
 	cannons_per_side = maxi(1, int(ceil(float(source.cannon_slots) * 0.5)))
+	gun_traverse = source.gun_traverse
 
 	_scale_hull(source.hull_scale)
 
@@ -298,6 +314,25 @@ func hull_fraction() -> float:
 
 func crew_fraction() -> float:
 	return float(crew) / float(maxi(max_crew, 1))
+
+
+## Wie gut sind die Geschuetze bedient? Die Zahl, die im Gefecht zaehlt.
+##
+## Nicht [method crew_fraction]: Eine Schaluppe faehrt mit vierzig Mann und
+## braucht sechzehn: Die ersten Verluste kosten Enterstaerke, nicht Feuer-
+## geschwindigkeit. Genau das soll man merken.
+func readiness() -> float:
+	return Gunnery.readiness(crew, min_crew, cannon_slots)
+
+
+## Wie gut das Schiff noch zu fahren ist, 0.3 bis 1.0.
+##
+## Unter der Mindestbesatzung laesst sich nicht mehr richtig segeln - zu wenige
+## Haende an Schoten und Rudern. Ein Schiff mit zwei von vier Mann kriecht dann
+## noch, faehrt aber nicht mehr. Analog zu [method sail_health], damit sich
+## beide Verluste im selben Wert niederschlagen: Fahrt.
+func handling() -> float:
+	return clampf(float(crew) / float(maxi(min_crew, 1)), MIN_HANDLING, 1.0)
 
 
 ## Wie gut die Segel noch ziehen, 0.0 bis 1.0. Zerschossene Takelage kostet
@@ -372,7 +407,7 @@ func battery_progress(side: int) -> float:
 	var remaining := _reload[battery_index(side)]
 	if remaining <= 0.0:
 		return 1.0
-	return clampf(1.0 - remaining / Gunnery.reload_seconds(crew_fraction()), 0.0, 1.0)
+	return clampf(1.0 - remaining / Gunnery.reload_seconds(readiness()), 0.0, 1.0)
 
 
 ## Feuert eine Breitseite ab, wenn sie geladen ist.
@@ -382,7 +417,7 @@ func battery_progress(side: int) -> float:
 func fire(side: int) -> bool:
 	if not battery_ready(side):
 		return false
-	_reload[battery_index(side)] = Gunnery.reload_seconds(crew_fraction())
+	_reload[battery_index(side)] = Gunnery.reload_seconds(readiness())
 	fire_requested.emit(side)
 	EventBus.cannons_fired.emit(self, side)
 	return true

@@ -30,6 +30,12 @@ extends Resource
 ## Rohre insgesamt. Die Haelfte davon liegt auf jeder Seite - eine Breitseite
 ## ist nie die ganze Bewaffnung.
 @export var cannon_slots: int = 8
+## Schwenkbereich der Rohre um querab, in Grad nach jeder Seite.
+##
+## Die Mannschaft richtet selbst, aber nur soweit die Lafette laesst. Ausserhalb
+## dieses Kegels schwenkt sie bis zum Anschlag und schiesst daneben - das ist
+## der Grund, warum im Gefecht das Ruder die Waffe ist.
+@export var gun_traverse: float = 20.0
 @export var cargo_capacity: int = 40
 
 @export_group("Auftreten")

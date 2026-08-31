@@ -14,6 +14,7 @@ turn_rate_deg = 22.0
 speed_inertia = 6.5
 turn_inertia = 1.8
 cannon_slots = 6
+gun_traverse = 20.0
 cargo_capacity = 90
 min_crew = 10
 max_crew = 26

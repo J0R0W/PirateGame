@@ -37,7 +37,7 @@ godot --headless --path . res://tests/smoke_test.tscn      # Rauchtest, Exit 0 =
 godot --headless --import                                  # nach neuen class_name-Dateien nötig
 ```
 
-Der Rauchtest ist **eine** Szene mit gut dreihundert Prüfungen; es gibt kein Test-Framework
+Der Rauchtest ist **eine** Szene mit knapp vierhundert Prüfungen; es gibt kein Test-Framework
 und keine Einzeltest-Auswahl. Einen einzelnen Block fährt man, indem man die anderen `_check_*`-Aufrufe
 in `_ready()` von `tests/smoke_test.gd` auskommentiert. Er dauert rund 35 Sekunden, weil er
 zwei vollständige Seegefechte im Zeitraffer fährt.
@@ -71,9 +71,17 @@ ausschließlich aus diesen Aufnahmen.
 ```bash
 godot --headless --path . res://tests/world_report.tscn     # 5 Welten: Landanteil, Inseln, Häfen, Beispielpreise
 godot --headless --path . res://tests/terrain_report.tscn   # Kennzahlen eines Küstenchunks
+godot --headless --path . res://tests/duel.tscn             # 15 Gefechte KI gegen KI: Salven, Treffer, Schaden
+godot --path . res://tests/duel.tscn                        # dieselbe Szene mit Fenster: Gefecht zum Spielen
 ```
 
 Parameter der Weltgenerierung werden hierüber eingestellt, nicht durch Probieren (Regel C4).
+Für das Gefecht gilt dasselbe: `tests/duel.tscn` ist beides — der Messlauf für Ballistik,
+Schaden und Bahnführung *und* die Szene, in der man ein Gefecht ohne Umweg ausprobiert
+(R neuer Gegner, G Gegnerklasse, H Ausgangslage). Die aussagekräftigste Spalte ist
+**„liegt an"**: der Anteil der Zeit, in dem überhaupt ein Rohr am Ziel war. Sinkt sie, liegt
+es an der KI, nicht an der Ballistik. `TRACE` schreibt den Verlauf eines Gefechts Sekunde
+für Sekunde mit, `TRACE_RUNS` jeden Einzellauf statt nur den Mittelwert.
 
 ## Architektur
 
@@ -107,7 +115,8 @@ Rauchtest ohne Fenster läuft:
 | Klasse | Inhalt |
 |---|---|
 | `SailingMath` | Segelmathematik, Winkelkonvention, fahrbare Kurse |
-| `Gunnery` | Ballistik: Lage, Entfernung, Trefferzonen, Aufgeben |
+| `Gunnery` | Ballistik: Richten, Vorhalten, Streuung, Trefferentscheid, Aufgeben |
+| `TargetProfile` | Was die Ballistik über ein Ziel weiß: Position, Fahrt, Kurs, Maße |
 | `ShipAI` | Die Entscheidungen eines KI-Kapitäns (statisch), der Node reicht sie nur weiter |
 | `TradeMath` | Preisbildung aus Lagerbestand |
 | `OceanWaves` | Wellenfeld — **doppelt vorhanden**, siehe unten |
@@ -135,8 +144,28 @@ Haus), trägt den Vermerk `# kein Kurs`.
 
 Land hält das Schiff auf, indem `WorldData.is_land()` die Position des nächsten Schrittes
 prüft. Kanonenkugeln haben keine Kollisionskörper: Eine Breitseite wird beim Abfeuern
-ausgewürfelt (`Gunnery.resolve_salvo`), die Kugeln fliegen danach nur noch zu einem Ergebnis,
-das feststeht — der Schaden fällt beim Aufschlag über einen `create_timer`-Callback.
+vollständig gerechnet (`Gunnery.resolve_salvo`) — Richtung, Bahn und Aufschlagpunkt jeder
+einzelnen Kugel —, die Kugeln fliegen danach nur noch zu einem Ergebnis, das feststeht; der
+Schaden fällt beim Aufschlag über einen `create_timer`-Callback.
+
+### Die Flugbahn ist die Wahrheit
+
+Getroffen wird nicht gewürfelt, sondern gerechnet. Die Rohre schwenken ±20° um querab
+(`ShipClass.gun_traverse`), alle Rohre einer Seite feuern parallel, und ob eine Kugel
+trifft, entscheidet ein Punkt-in-Rechteck-Test gegen den Rumpf des Gegners
+(`Gunnery.hits_target`). Der Zufall sitzt nur noch im Vorhalten (`LEAD_SPREAD`) und in der
+Streuung je Rohr (`SPREAD_DEG`); beide wachsen mit der Entfernung und mit fehlender
+Bedienung.
+
+**Die Kugel streut seitlich, nicht in der Tiefe** — sie liegt immer auf der geschätzten
+Entfernung. Das ist kein vergessener Fehler, sondern die Voraussetzung dafür, dass ein
+Schiff quer zu dir ein großes Ziel ist und eines mit dem Bug voran ein schmales. Mit einem
+Streuen in der Tiefe kehrte sich das um, weil ein bugvorausstehendes Schiff in
+Schussrichtung länger ist.
+
+**`Ship.readiness()`, nicht `crew_fraction()`.** Mannschaft zählt im Gefecht erst, was über
+`min_crew` hinausgeht; zwei Mann je Rohr für volle Ladegeschwindigkeit. `crew_fraction()`
+bleibt für die Moral (`Gunnery.will_strike`) — wer aufgibt, zählt Köpfe, nicht Bedienung.
 
 ### Höhen: mathematisch ≠ gezeichnet
 

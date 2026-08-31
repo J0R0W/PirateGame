@@ -528,38 +528,69 @@ Jede Stadt führt **jede** Ware, auch die, die sie weder erzeugt noch braucht �
 sie dafür ein leeres Lager, und ein leeres Lager heißt Höchstpreis. Man hätte Holz an
 jedes Dorf zum Doppelten verkaufen können.
 
-### 7.8 Das Gefecht — drei Zahlen, die der Spieler beeinflusst
+### 7.8 Das Gefecht — die Flugbahn ist die Wahrheit
 
-Ob eine Kugel trifft, hängt an **Lage, Entfernung und Mannschaft**. Nichts davon ist
-versteckt, und alle drei stehen im Bild.
+Bis M4 war Treffen ein verdeckter Würfelwurf: Aus dem Winkel zum Ziel wurde eine
+Wahrscheinlichkeit, und die Kugeln flogen danach zu einem Ergebnis, das schon feststand.
+Die Flugbahn war Dekoration.
+
+Heute zeigen die Rohre wirklich dorthin, wohin sie zeigen. Wo die Kugeln niedergehen,
+entscheidet die Geometrie — ein Punkt-in-Rechteck-Test gegen den Rumpf des Gegners.
 
 ```
-Lage        = 1 - Winkel_zu_querab / 70°        0 bei Bug und Heck, 1 genau querab
-Entfernung  = 1 bis 150 m, danach fallend bis 0,18 auf 420 m
-Mannschaft  = Anteil der verbliebenen Leute, mindestens 0,4
-Treffer     = 0,60 × Lage × Entfernung × Mannschaft      je Rohr
+Schwenkbereich  ±20° um querab            ShipClass.gun_traverse
+Richtung        querab, bis zum Anschlag auf den Vorhaltepunkt geschwenkt
+Vorhalten       Zielposition + Fahrt × Flugzeit, ±6 m Fehler entlang seines Kurses
+Streuung        ±1,2° je Rohr
+beide Fehler    × (Entfernung / 150 m) ÷ Bedienung
+Treffer         Kugel landet im gedrehten Rechteck 2·half_length × 2·half_beam
 ```
 
-**Der Feuerbereich ist die Regel, die alles trägt.** Wer dem Gegner ins Heck fällt, kann
-nicht schießen. Deshalb wird manövriert statt hinterhergefahren, und deshalb zeigt das HUD
-für jede Breitseite an, ob sie *lädt*, *bereit* ist oder *anliegt* — die Anzeige leuchtet
-genau dann auf, wenn ein Schuss auch ankäme.
+**Der Schwenkbereich ist die Regel, die alles trägt.** Zwanzig Grad um querab sind so eng,
+dass das Ruder die Waffe ist: Wer dem Gegner ins Heck fällt, kann nicht schießen, und wer
+schräg steht, sieht seine Salve vorbeigehen — die Rohre stehen dann am Anschlag. Das HUD
+zeigt für jede Breitseite, ob sie *lädt*, *bereit* ist oder *anliegt*; „liegt an" heißt
+seitdem wörtlich, dass die Kugeln den Gegner bekommen.
 
-**Das Ergebnis steht fest, bevor die Kugel fliegt.** Eine Breitseite wird im Moment des
-Abfeuerns ausgewürfelt; die Kugeln fliegen danach nur noch die Bahn zu einem Ausgang, der
-schon feststeht. Das hat zwei Gründe: Die Ballistik lässt sich so ohne Szene prüfen, und
-es braucht keine Kollisionskörper für ein Dutzend Geschosse zwischen zwei fahrenden Zielen.
+**Die Lage des Gegners ist eine eigene Größe.** Ein Schiff quer zu dir ist zehn Meter breit
+im Anschlag, dasselbe Schiff mit dem Bug voran keine vier. Wer sich dem Feind zudreht,
+macht sich schmal. Dass die Kugel dabei auf Entfernung stimmt und nur seitlich streut, ist
+kein Versehen, sondern die Voraussetzung dafür — mit einem Streuen in der Tiefe wäre ein
+Schiff mit dem Bug zu dir das *leichtere* Ziel, weil es in Schussrichtung länger ist.
+
+**Die Mannschaft hat zwei Aufgaben, und Fahren geht vor.** `min_crew` Leute halten das
+Schiff überhaupt in Fahrt; erst was darüber hinausgeht, bedient die Geschütze — zwei Mann
+je Rohr für die volle Ladegeschwindigkeit. Daraus folgt ein Zug, der sich lesen lässt: Eine
+Schaluppe fährt mit vierzig Mann und braucht sechzehn, also kosten die ersten Verluste
+Enterstärke und erst die späten Feuergeschwindigkeit. Unter die Mindestbesatzung zu fallen
+kostet Fahrt (`Ship.handling()`); ganz stehen bleibt niemand.
+
+**Das Ergebnis steht trotzdem fest, bevor die Kugel fliegt.** Eine Breitseite wird im
+Moment des Abfeuerns fertig gerechnet — Richtung, Bahnen, Treffer —, danach fliegt die
+Darstellung nur noch die Strecke ab. Das hat dieselben zwei Gründe wie vorher: Die
+Ballistik lässt sich so ohne Szene prüfen, und es braucht keine Kollisionskörper für ein
+Dutzend Geschosse zwischen zwei fahrenden Zielen. Neu ist nur, dass gerechnet statt
+gewürfelt wird.
 
 **Aufgeben statt Sinken.** Unter 30 % Rumpf streicht ein Kapitän die Flagge — bei einem
 gefürchteten Gegner früher. Erst dann gibt es Beute. Wer weiter auf den Rumpf schießt,
 versenkt seine eigene Prise: Ladung und Kasse gehen mit unter. Das ist der Preis für den
 kurzen Weg, und der Grund, warum sich Fernbeschuss auf die Takelage lohnt.
 
-**Die KI verfolgt einen Platz, nicht den Gegner.** Ein Kapitän fährt nicht auf das
-gegnerische Schiff zu, sondern auf einen Punkt längsseits davon. Wer den Gegner selbst
-ansteuert, landet in seinem Kielwasser — dort liegt kein Rohr an, und beide fahren bis zum
-Sonnenuntergang geradeaus. Genau das ist im ersten Probelauf passiert: achtzig Sekunden
-Gefecht, sieben Punkte Schaden.
+**Die KI dreht ein, statt hinterherzufahren.** Ein Kapitän legt einen Vorhalt auf die
+Peilung: weit draußen null, sodass wirklich aufgeschlossen wird, auf hundert Metern volle
+neunzig Grad, sodass der Gegner querab steht. Dazwischen ergibt sich eine Spirale, die von
+selbst in einen Kreis um den Gegner einläuft — und dieser Kreis ist genau die Bahn, auf der
+die Breitseite anliegt. Wer stattdessen den Gegner selbst ansteuert, landet in seinem
+Kielwasser; dort liegt kein Rohr an, und beide fahren bis zum Sonnenuntergang geradeaus.
+Genau das ist im ersten Probelauf von M4 passiert: achtzig Sekunden Gefecht, sieben Punkte
+Schaden.
+
+M4 hat das über einen festen Platz längsseits gelöst. Mit einem Schwenkbereich von zwanzig
+Grad reichte das nicht mehr: Der Platz fährt mit, ein Verfolger mit vier Knoten Vorsprung
+braucht Minuten, um ihn einzuholen, und solange steht der Gegner schräg voraus. Gemessen
+mit `tests/duel.tscn` — zwölf Prozent der Zeit lag ein Rohr an. Mit der Spirale sind es
+fünfundfünfzig.
 
 ### 7.9 Ordnerstruktur
 
@@ -766,8 +797,8 @@ Segel kosten Fahrt, fehlende Leute Ladezeit und Treffsicherheit. Unter 30 % Rump
 streicht der Gegner die Flagge und lässt sich mit der Leertaste aufbringen. Der
 Rauchtest fährt die Abnahmebedingung: dieselbe Ausgangslage zweimal, derselbe Würfel,
 einmal mit einem Kapitän, der den Gegner querab hält, und einmal mit einem, der
-drauflosfährt — **158 gegen 25 Punkte Schaden**, und nur der erste zwingt den Gegner zur
-Flagge.
+drauflosfährt. (Die Zahlen dazu stehen weiter unten beim Geschützrichten — sie sind mit
+der neuen Ballistik neu gemessen worden.)
 
 Die Werft heuert seit M4 auch an. Das gehört eigentlich in die Taverne (M6), musste aber
 vorgezogen werden: Ein Gefecht kostet Mannschaft, fehlende Leute kosten Ladezeit und
@@ -798,10 +829,33 @@ Drei Fehler, die erst das Fahren und Rendern gezeigt hat:
 Der erste Mündungsrauch war außerdem so groß und undurchsichtig, dass das eigene Schiff
 hinter der eigenen Breitseite verschwand.
 
-Stellschrauben fürs Gefecht in `world/combat/gunnery.gd` (Feuerbereich, Reichweite,
-Trefferzonen, Aufgeben), fürs Verhalten der Gegner in `entities/ship/ship_ai.gd`, für
-Begegnungen und Beute in `world/combat/naval_combat.gd`, für die Schiffe selbst in
-`resources/ships/*.tres`.
+Stellschrauben fürs Gefecht in `world/combat/gunnery.gd` (Schwenkbereich, Reichweite,
+Vorhalten, Streuung, Trefferzonen, Aufgeben), fürs Verhalten der Gegner in
+`entities/ship/ship_ai.gd`, für Begegnungen und Beute in `world/combat/naval_combat.gd`,
+für die Schiffe selbst in `resources/ships/*.tres`.
+
+**Das Geschützrichten neu gebaut.** Die Ballistik von M4 war eine Wahrscheinlichkeit mit
+einer Flugbahn davor; jetzt ist die Flugbahn die Wahrheit (Abschnitt 7.8). Der
+Schwenkbereich fiel von 70 auf ±20 Grad, die Mannschaft richtet selbst und hält vor, und
+ob getroffen wird, entscheidet ein Punkt-in-Rechteck-Test gegen den Rumpf des Gegners.
+
+Gemessen wurde mit `tests/duel.tscn` — derselben Szene, in der man das Gefecht auch
+spielen kann. Aus dem ersten Messlauf kamen drei Zahlen, die man nicht raten kann:
+
+- Eine richtig gelegte Breitseite trifft auf 150 Metern **rund drei von vier Kugeln**
+  statt wie bisher jede zweite. Der Schaden je Kugel bleibt trotzdem bei den Werten aus
+  M4 (8 / 10 / 2) — es fallen dafür deutlich weniger Salven, weil der enge Kegel und die
+  Feuerdisziplin der KI zusammen mehr kosten, als die Treffsicherheit einbringt.
+- Die KI musste umgebaut werden, sonst hätte sie gar nichts mehr getroffen: Der Platz
+  längsseits aus M4 wich der Spirale, die Ruderverstärkung stieg von 2,4 auf 3,4, die
+  Seitenhysterese von 25 auf 70 Grad, und auf über 225 Meter wird nicht mehr gefeuert.
+  Anteil der Zeit, in der ein Rohr anlag: **12 % vorher, 55 % nachher.**
+- Eine fliehende Handelsbrigg entkommt der KI in vier von fünf Läufen. Das bleibt so —
+  eine Beute zu stellen ist die Aufgabe des Spielers, nicht die eines Skripts.
+
+Die Abnahmebedingung im Rauchtest läuft jetzt gegen ein Kriegsschiff statt gegen eine
+Handelsbrigg: **123 gegen 18 Punkte Schaden**, Flagge nach 30 Sekunden. Gegen einen
+Fliehenden sagt ein Duell nur, wer schneller ist.
 
 ---
 

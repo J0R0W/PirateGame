@@ -13,8 +13,6 @@ extends Node3D
 
 ## Kugelradius in Metern. Grob viermal uebertrieben, sonst sieht man nichts.
 const BALL_RADIUS: float = 0.45
-## Flugzeit fuer die volle Schussweite, in Sekunden.
-const FLIGHT_SECONDS: float = 1.4
 ## Scheitelhoehe der Bahn, als Anteil der Schussweite.
 ##
 ## Deutlich hoeher als physikalisch richtig - eine flach fliegende Kugel ist aus
@@ -63,18 +61,12 @@ func launch(from: Vector3, to: Vector3, splash: bool) -> void:
 	global_position = from
 
 	var distance := from.distance_to(to)
-	_duration = flight_time(distance)
+	# Dieselbe Flugzeit, mit der die Ballistik das Vorhalten gerechnet hat -
+	# sonst kommt die Kugel woanders an, als die Mannschaft gezielt hat.
+	_duration = Gunnery.flight_time(distance)
 	_arc = maxf(distance * ARC_HEIGHT, MIN_ARC)
 
 	add_child(_ball_mesh())
-
-
-## Wie lange eine Kugel auf diese Entfernung braucht.
-##
-## Auch der Schaden wartet darauf: Er faellt erst, wenn die Kugel ankommt -
-## sonst sinkt ein Gegner, waehrend die Breitseite noch in der Luft steht.
-static func flight_time(distance: float) -> float:
-	return maxf(FLIGHT_SECONDS * distance / Gunnery.MAX_RANGE, 0.25)
 
 
 func _process(delta: float) -> void:

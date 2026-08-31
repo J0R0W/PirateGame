@@ -1,7 +1,9 @@
 ## Das Ergebnis eines einzelnen Kanonenschusses.
 ##
-## Steht schon fest, bevor die Kugel fliegt - siehe [Gunnery]. Die Darstellung
-## liest hier ab, wohin sie die Kugel schicken muss und was am Ende passiert.
+## Steht fest, sobald die Breitseite faellt - siehe [Gunnery]. Neu gegenueber
+## M4 ist, dass hier keine Streuung um das Ziel mehr steht, sondern die Bahn
+## selbst: Wo das Rohr stand und wo die Kugel niedergeht. Ob das ein Treffer
+## ist, hat die Geometrie entschieden und nicht ein Wurf.
 class_name Shot
 extends RefCounted
 
@@ -10,10 +12,13 @@ var hit: bool = false
 var zone: int = Gunnery.Zone.HULL
 var damage: int = 0
 
-## Streuung um den Zielpunkt in Metern, quer und laengs zur Schussrichtung.
-## Bei einem Treffer klein (der Rumpf ist getroffen), bei einem Fehlschuss so
-## gross, dass die Fontaene sichtbar neben dem Ziel steht.
-var scatter: Vector2 = Vector2.ZERO
+## Muendung dieses Rohres in der Weltebene. Die Rohre stehen ueber die Laenge
+## des Schiffs verteilt, deshalb hat jede Kugel ihren eigenen Startpunkt.
+var origin: Vector2 = Vector2.ZERO
+## Wo die Kugel niedergeht - im Rumpf des Gegners oder im Wasser daneben.
+## Die Darstellung fliegt genau hierhin, damit ein Fehlschuss sichtbar
+## vorbeigeht und nicht irgendwo platscht.
+var impact: Vector2 = Vector2.ZERO
 
 
 func zone_name() -> String:

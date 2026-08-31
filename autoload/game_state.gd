@@ -114,6 +114,21 @@ func max_crew() -> int:
 	return ship_class.max_crew if ship_class != null else 40
 
 
+## Soviele Leute halten das Schiff in Fahrt. Alles darueber bedient die Rohre.
+func min_crew() -> int:
+	return ship_class.min_crew if ship_class != null else 4
+
+
+## Wie gut die Geschuetze bedient sind, 0.35 bis 1.0.
+##
+## Die Zahl, die im Gefecht zaehlt - nicht der Anteil an der Hoechstbesatzung.
+## Sie steht hier und nicht nur im [Ship], weil Hafenbildschirme und HUD sie
+## brauchen, wenn kein Schiff in der Szene haengt.
+func readiness() -> float:
+	var slots := ship_class.cannon_slots if ship_class != null else 6
+	return Gunnery.readiness(crew, min_crew(), slots)
+
+
 func cargo_capacity() -> int:
 	return ship_class.cargo_capacity if ship_class != null else 40
 

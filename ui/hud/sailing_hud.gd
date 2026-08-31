@@ -96,12 +96,17 @@ func _process(delta: float) -> void:
 
 	# Die Mannschaft steht mit dabei, seit sie im Gefecht etwas bedeutet: Wer
 	# Leute verliert, laedt langsamer und trifft schlechter (siehe Gunnery).
+	#
+	# Gefaerbt wird nach der Bedienung, nicht nach dem Anteil an der Hoechstzahl.
+	# Eine Schaluppe faehrt mit vierzig Mann und braucht sechzehn - die Haelfte
+	# der Mannschaft zu verlieren sieht nach der Haelfte aus, kostet aber noch
+	# keinen einzigen Ladevorgang.
 	var worst := minf(
 		minf(
 			float(GameState.hull) / float(maxi(GameState.max_hull(), 1)),
 			GameState.sail_condition()
 		),
-		float(GameState.crew) / float(maxi(GameState.max_crew(), 1))
+		GameState.readiness()
 	)
 	_condition.text = "Rumpf %d  ·  Segel %d  ·  %d Mann" % [
 		GameState.hull, GameState.sails, GameState.crew
@@ -145,9 +150,9 @@ func _update_target() -> void:
 		_target_class.text = ""
 		_target_condition.text = ""
 		_paint_battery(_port_battery, "Q   Backbord",
-			ship.battery_progress(Gunnery.PORT), -1.0)
+			ship.battery_progress(Gunnery.PORT), false)
 		_paint_battery(_starboard_battery, "Steuerbord   E",
-			ship.battery_progress(Gunnery.STARBOARD), -1.0)
+			ship.battery_progress(Gunnery.STARBOARD), false)
 		return
 
 	var distance := ship.plan_position().distance_to(enemy.plan_position())
@@ -172,24 +177,28 @@ func _update_target() -> void:
 
 	var bearing := SailingMath.bearing(ship.plan_position(), enemy.plan_position())
 	for side: int in [Gunnery.PORT, Gunnery.STARBOARD]:
-		var quality := Gunnery.bearing_quality(ship.heading(), bearing, side)
-		if distance > Gunnery.MAX_RANGE:
-			quality = 0.0
+		var bears := distance <= Gunnery.MAX_RANGE and Gunnery.bears(
+			ship.heading(), bearing, side, ship.gun_traverse
+		)
 		var label := _port_battery if side == Gunnery.PORT else _starboard_battery
 		var caption := "Q   Backbord" if side == Gunnery.PORT else "Steuerbord   E"
-		_paint_battery(label, caption, ship.battery_progress(side), quality)
+		_paint_battery(label, caption, ship.battery_progress(side), bears)
 
 
-## Die Beschriftung einer Batterie. [param quality] unter null heisst: kein
-## Ziel - dann steht dort nur, ob geladen ist.
+## Die Beschriftung einer Batterie.
+##
+## "Liegt an" ist seit der Umstellung auf gerichtete Rohre woertlich zu nehmen:
+## Es steht genau dann da, wenn die Kugeln den Gegner auch bekommen. Vorher war
+## es eine Schwelle auf einer Wahrscheinlichkeit, und ein Spieler konnte
+## danebenschiessen, obwohl das HUD gruen leuchtete.
 ##
 ## Farbregel A5: Gruen heisst gut fuer dich. Nachladen wird abgeblendet, nicht
 ## rot - rot bedeutet in diesem Spiel Schaden.
-func _paint_battery(label: Label, caption: String, progress: float, quality: float) -> void:
+func _paint_battery(label: Label, caption: String, progress: float, bears: bool) -> void:
 	if progress < 1.0:
 		label.text = "%s   lädt %d %%" % [caption, int(progress * 100.0)]
 		_paint(label, Palette.fade(Palette.HUD_DIM, 0.45))
-	elif quality >= ShipAI.FIRE_QUALITY:
+	elif bears:
 		label.text = "%s   liegt an" % caption
 		_paint(label, Palette.GOOD)
 	else:

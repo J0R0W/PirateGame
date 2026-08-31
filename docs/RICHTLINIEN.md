@@ -328,12 +328,19 @@ Weil man sich darauf nicht verlassen kann, prüft der Rauchtest es zusätzlich s
 Parameter der Weltgenerierung werden über `tests/world_report.tscn` eingestellt, nicht
 durch Probieren. Performance wird beziffert, nicht geschätzt.
 
-Für das Gefecht macht das der Rauchtest selbst. Der Feuerbereich stand zuerst bei 50 Grad,
-weil das eng und damit taktisch klang. Gefahren wurde daraus ein Verfolger, der achtzig
-Sekunden neben seiner Beute herfuhr, ohne dass je ein Rohr anlag — eine Verfolgungskurve
-passt durch dieses Fenster nicht hindurch. 70 Grad hat es gelöst, und die Zahl steht jetzt
-mit diesem Grund daneben. Genauso das Reffen im Gefecht: klang richtig, kostete ein Drittel
-Fahrt und ließ jede Beute entkommen.
+Für das Gefecht machen das der Rauchtest und `tests/duel.tscn`. Der Feuerbereich stand
+zuerst bei 50 Grad, weil das eng und damit taktisch klang. Gefahren wurde daraus ein
+Verfolger, der achtzig Sekunden neben seiner Beute herfuhr, ohne dass je ein Rohr anlag —
+eine Verfolgungskurve passt durch dieses Fenster nicht hindurch. Genauso das Reffen im
+Gefecht: klang richtig, kostete ein Drittel Fahrt und ließ jede Beute entkommen.
+
+Beim Umbau auf gerichtete Rohre hat sich dieselbe Regel noch einmal bewährt. Der
+Schwenkbereich fiel auf ±20 Grad, und die Bahnführung der KI aus M4 wurde damit unbrauchbar
+— nur sah man das nicht, sondern maß es: Der Messlauf zählt mit, wieviel Prozent der Zeit
+überhaupt ein Rohr anlag. Zwölf Prozent waren es, fünfundfünfzig sind es jetzt. Drei Anläufe
+(Segelstellung nach Position, Abfangkurs auf den Platz, Spirale) hätte man ohne diese Zahl
+nicht auseinanderhalten können — der Schaden je Gefecht schwankt zu stark. **Wer eine
+Balancezahl ändert, misst die Größe, an der sie hängt, und nicht das Ergebnis am Ende.**
 
 ### <a id="durchsetzung"></a>C5. Was automatisch geprüft wird
 

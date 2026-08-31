@@ -59,6 +59,16 @@ const DEFEAT_HULL_SHARE: float = 0.25
 ## nichts mehr hat. Eine Niederlage soll etwas kosten, nicht alles.
 const TRUCE_SECONDS: float = 60.0
 
+# --- Masse der Darstellung -------------------------------------------------
+## Wie weit die Batterie aus der Mittschiffslinie steht, in halben Rumpfbreiten.
+const BATTERY_OFFSET: float = 1.6
+## Muendungshoehe ueber der Wasserlinie, in Metern.
+const MUZZLE_HEIGHT: float = 1.8
+## Auf dieser Hoehe schlaegt ein Treffer in die Bordwand.
+const HIT_HEIGHT: float = 1.4
+## Und so tief steht die Fontaene eines Fehlschusses.
+const SPLASH_LEVEL: float = 0.4
+
 ## Sekunden, die ein Wrack beim Sinken braucht.
 const SINK_SECONDS: float = 6.0
 ## Und wie tief es dabei geht.
@@ -328,13 +338,18 @@ func _on_fire_requested(side: int, shooter: Ship) -> void:
 	if target == null or target.finished:
 		return
 
-	var distance := shooter.plan_position().distance_to(target.plan_position())
-	var bearing := SailingMath.bearing(shooter.plan_position(), target.plan_position())
-	var quality := Gunnery.bearing_quality(shooter.heading(), bearing, side)
+	var muzzle := battery_centre(shooter, side)
 	var shots := Gunnery.resolve_salvo(
-		rng, shooter.cannons_per_side, distance, quality, shooter.crew_fraction()
+		rng,
+		shooter.cannons_per_side,
+		muzzle,
+		shooter.heading(),
+		side,
+		profile_of(target),
+		shooter.readiness(),
+		shooter.gun_traverse
 	)
-	_launch_balls(shooter, side, target, shots)
+	_launch_balls(shooter, shots)
 
 	# Der Schaden faellt erst, wenn die Kugeln ankommen - sonst sinkt ein
 	# Gegner, waehrend die Breitseite noch in der Luft steht.
@@ -342,8 +357,34 @@ func _on_fire_requested(side: int, shooter: Ship) -> void:
 	# Als Signal und nicht als await: Legt der Spieler an, waehrend eine Salve
 	# fliegt, verschwindet diese Szene mitsamt dem Gefecht. Eine Verbindung
 	# loest sich dabei von selbst, eine wartende Funktion nicht.
-	get_tree().create_timer(CannonBall.flight_time(distance)).timeout.connect(
+	var distance := muzzle.distance_to(target.plan_position())
+	get_tree().create_timer(Gunnery.flight_time(distance)).timeout.connect(
 		_apply.bind(shots, target, shooter), CONNECT_ONE_SHOT
+	)
+
+
+## Der Mittelpunkt einer Batterie in der Weltebene.
+##
+## Nicht der Schiffsmittelpunkt: Die Rohre stehen an der Bordwand, und auf 60
+## Metern ist das ein sichtbarer Unterschied in der Schussrichtung.
+static func battery_centre(shooter: Ship, side: int) -> Vector2:
+	var across := SailingMath.direction(Gunnery.abeam(shooter.heading(), side))
+	return shooter.plan_position() + across * shooter.half_beam * BATTERY_OFFSET
+
+
+## Alles, was die Ballistik ueber ein Ziel wissen muss.
+##
+## Die Fahrt kommt aus [member CharacterBody3D.velocity] und nicht aus Kurs mal
+## Knoten: Ein aufgelaufenes oder beidrehendes Schiff steht dann auch wirklich
+## still, statt dass die Mannschaft auf eine Fahrt vorhaelt, die es nicht mehr
+## macht.
+static func profile_of(target: Ship) -> TargetProfile:
+	return TargetProfile.make(
+		target.plan_position(),
+		Vector2(target.velocity.x, target.velocity.z),
+		target.heading(),
+		target.half_length,
+		target.half_beam
 	)
 
 
@@ -386,36 +427,35 @@ func _check_strike(ship: Ship) -> void:
 	EventBus.ship_struck.emit(ship.ship_name)
 
 
-func _launch_balls(shooter: Ship, side: int, target: Ship, shots: Array[Shot]) -> void:
-	var across := shooter.global_basis.x * float(side)
-	var forward := -shooter.global_basis.z
-	var muzzle := shooter.global_position + across * shooter.half_beam * 1.6 + Vector3.UP * 1.8
-	var aim := target.global_position
-
-	var flat := aim - muzzle
-	flat.y = 0.0
-	if flat.length_squared() < 1.0:
-		return
-	var to_target := flat.normalized()
-	var sideways := Vector3(-to_target.z, 0.0, to_target.x)
-
-	for i in shots.size():
-		var shot: Shot = shots[i]
-		# Die Rohre stehen ueber die Laenge des Schiffs verteilt, nicht an
-		# einem Punkt - sonst sieht eine Breitseite aus wie ein Schuss.
-		var offset := forward * (float(i) - float(shots.size() - 1) * 0.5) * 1.6
-		var point := aim + sideways * shot.scatter.x + to_target * shot.scatter.y
-		point.y = aim.y + 1.4 if shot.hit else 0.4
-
+## Schickt die Kugeln los.
+##
+## Hier wird nichts mehr entschieden: Jede Kugel hat ihre Muendung und ihren
+## Aufschlagpunkt aus der Ballistik, und die Darstellung fliegt genau dorthin.
+## Das ist der Kern der Umstellung - ein Fehlschuss geht jetzt sichtbar vor
+## oder hinter dem Gegner nieder, statt irgendwo daneben zu platschen.
+func _launch_balls(shooter: Ship, shots: Array[Shot]) -> void:
+	var deck := shooter.global_position.y + MUZZLE_HEIGHT
+	for shot: Shot in shots:
+		var from := Vector3(shot.origin.x, deck, shot.origin.y)
+		# Ein Treffer schlaegt in die Bordwand, ein Fehlschuss ins Wasser.
+		var to := Vector3(
+			shot.impact.x,
+			shooter.global_position.y + HIT_HEIGHT if shot.hit else SPLASH_LEVEL,
+			shot.impact.y
+		)
 		var ball := CannonBall.new()
 		add_child(ball)
-		ball.launch(muzzle + offset, point, not shot.hit)
+		ball.launch(from, to, not shot.hit)
 
 
 func _muzzle_smoke(shooter: Ship, side: int) -> void:
-	var across := shooter.global_basis.x * float(side)
-	var at := shooter.global_position + across * shooter.half_beam * 2.0 + Vector3.UP * 1.8
-	CannonBall.puff(self, at, CannonBall.MUZZLE_RADIUS, Palette.SMOKE)
+	var at := battery_centre(shooter, side)
+	CannonBall.puff(
+		self,
+		Vector3(at.x, shooter.global_position.y + MUZZLE_HEIGHT, at.y),
+		CannonBall.MUZZLE_RADIUS,
+		Palette.SMOKE
+	)
 
 
 func _on_ship_damaged(_zone: int, _amount: int, ship: Ship) -> void:
