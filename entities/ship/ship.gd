@@ -120,11 +120,6 @@ const HEEL_DEGREES: float = 7.0
 ## Wie schnell ein gestrichenes Schiff aufstoppt, in Sekunden.
 const STRIKE_STOP_INERTIA: float = 3.0
 
-## Soweit faellt die Fahrt hoechstens, wenn die Mannschaft unter die Mindest-
-## besatzung sinkt. Nicht auf null: Ein manoevrierunfaehiges Wrack, das nur
-## noch treibt, waere eine Sackgasse statt einer Niederlage.
-const MIN_HANDLING: float = 0.3
-
 ## Restliche Nachladezeit je Seite, Index 0 = Backbord, 1 = Steuerbord.
 var _reload: PackedFloat32Array = PackedFloat32Array([0.0, 0.0])
 
@@ -325,14 +320,10 @@ func readiness() -> float:
 	return Gunnery.readiness(crew, min_crew, cannon_slots)
 
 
-## Wie gut das Schiff noch zu fahren ist, 0.3 bis 1.0.
-##
-## Unter der Mindestbesatzung laesst sich nicht mehr richtig segeln - zu wenige
-## Haende an Schoten und Rudern. Ein Schiff mit zwei von vier Mann kriecht dann
-## noch, faehrt aber nicht mehr. Analog zu [method sail_health], damit sich
-## beide Verluste im selben Wert niederschlagen: Fahrt.
+## Wie gut das Schiff noch zu fahren ist, 0.3 bis 1.0. Die Formel steht in
+## [SailingMath], weil das HUD sie ohne Schiff in der Szene ebenfalls braucht.
 func handling() -> float:
-	return clampf(float(crew) / float(maxi(min_crew, 1)), MIN_HANDLING, 1.0)
+	return SailingMath.handling(crew, min_crew)
 
 
 ## Wie gut die Segel noch ziehen, 0.0 bis 1.0. Zerschossene Takelage kostet

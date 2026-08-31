@@ -20,6 +20,8 @@ signal broadside_landed(by_player: bool, hits: int, shots: int)
 signal ship_struck(ship_name: String)
 ## Prise genommen: Gold und Ladungseinheiten, die an Bord gingen.
 signal prize_taken(ship_name: String, gold: int, units: int)
+## Ein Enterkampf ist ausgefochten. [param won] heisst: Das Deck ist genommen.
+signal boarding_resolved(ship_name: String, won: bool, own_losses: int, their_losses: int)
 ## Das eigene Schiff ist gefechtsunfaehig. Der Gegner nimmt sich, was er will.
 signal player_struck(lost_gold: int, lost_units: int)
 
@@ -52,4 +54,6 @@ signal port_left(town_id: int)
 signal dock_target_changed(town_id: int)
 ## Eine Prise liegt laengsseit, oder nicht mehr. Leerer Name heisst: keine.
 signal prize_target_changed(ship_name: String)
+## Ein Gegner liegt nahe genug zum Entern, oder nicht mehr. Leer heisst: keiner.
+signal boarding_target_changed(ship_name: String)
 signal mode_changed(mode_path: String)

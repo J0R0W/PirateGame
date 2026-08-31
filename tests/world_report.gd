@@ -60,6 +60,8 @@ func _ready() -> void:
 			nation.display_name, per_nation.get(nation.id, 0), ", ".join(names)
 		])
 
+	_report_economy()
+
 	var sample: TownData = WorldData.towns[0] if not WorldData.towns.is_empty() else null
 	if sample != null:
 		print("\n  Beispielstadt %s:" % sample.town_name)
@@ -76,6 +78,44 @@ func _ready() -> void:
 			])
 
 	get_tree().quit(0)
+
+
+## Wieviel Handel die Welt ueberhaupt hergibt.
+##
+## Die Ziehung in _assign_economy() ueberspringt einen Treffer, den die Stadt
+## schon erzeugt oder schon braucht - sie zieht nicht neu. Je kleiner der
+## Warenvorrat, desto oefter faellt eine Ziehung damit aus, und eine Stadt ohne
+## Bedarf ist ein Hafen, in dem sich nichts verkaufen laesst.
+##
+## Deshalb steht das hier und nicht im Kopf: Wer Waren hinzufuegt oder
+## herausnimmt, sieht sofort, was es mit dem Handel macht (Regel C4).
+func _report_economy() -> void:
+	var produced := 0
+	var demanded := 0
+	var without_demand := 0
+	var per_tier := {0: [0, 0], 1: [0, 0], 2: [0, 0]}
+	for town: TownData in WorldData.towns:
+		produced += town.production.size()
+		demanded += town.demand.size()
+		if town.demand.is_empty():
+			without_demand += 1
+		var slot: Array = per_tier[clampi(town.size_tier, 0, 2)]
+		slot[0] += 1
+		slot[1] += town.demand.size()
+
+	var count := maxi(WorldData.towns.size(), 1)
+	print("
+  Handel (%d Waren, %d Staedte):" % [CargoRegistry.ids().size(), count])
+	print("    Erzeugnisse je Stadt   %.2f" % (float(produced) / float(count)))
+	print("    Bedarfe je Stadt       %.2f" % (float(demanded) / float(count)))
+	print("    Staedte ohne Bedarf    %d" % without_demand)
+	for tier: int in [0, 1, 2]:
+		var slot: Array = per_tier[tier]
+		if slot[0] > 0:
+			print("    Bedarfe %-12s %.2f  (%d Staedte)" % [
+				["Dorf", "Stadt", "Hauptstadt"][tier],
+				float(slot[1]) / float(slot[0]), slot[0],
+			])
 
 
 ## Waren-Ids in lesbare Namen mit Mengen.

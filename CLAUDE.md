@@ -21,10 +21,12 @@ und Kommentare erklären, *warum* etwas so gebaut ist.
 
 Vor größeren Änderungen lesen — sie sind die Quelle, nicht diese Datei:
 
-- **`docs/RICHTLINIEN.md`** — verbindliche Regeln für Gestaltung (A1–A10), Code (B1–B14) und
+- **`docs/RICHTLINIEN.md`** — verbindliche Regeln für Gestaltung (A1–A10), Code (B1–B15) und
   Tests (C1–C6). Jede Regel steht dort mit dem konkreten Fehler, aus dem sie entstanden ist.
 - **`docs/KONZEPT.md`** — Vision, Systeme, Roadmap (M0–M7), Abschnitt 10 „Stand" und
   Abschnitt 11 „Nächste Schritte". Wird mit jedem Meilenstein fortgeschrieben.
+- **`docs/STORY.md`** — Story-Konzept: Prämisse, Herkunft, Akte, Pfade, Mehrspieler-Ausblick.
+  Optionaler Erzählstrang über der Sandbox aus `KONZEPT.md` 1, kein Ersatz dafür.
 
 Neue Regeln entstehen aus Fehlern, nicht aus Vermutungen. Wer eine Regel hinzufügt, schreibt
 den Fehler dazu.
@@ -114,9 +116,10 @@ Rauchtest ohne Fenster läuft:
 
 | Klasse | Inhalt |
 |---|---|
-| `SailingMath` | Segelmathematik, Winkelkonvention, fahrbare Kurse |
+| `SailingMath` | Segelmathematik, Winkelkonvention, fahrbare Kurse, Fahrbarkeit bei fehlender Mannschaft |
 | `Gunnery` | Ballistik: Richten, Vorhalten, Streuung, Trefferentscheid, Aufgeben |
 | `TargetProfile` | Was die Ballistik über ein Ziel weiß: Position, Fahrt, Kurs, Maße |
+| `Boarding` | Der Enterkampf: Stärke, Siegchance, Verluste |
 | `ShipAI` | Die Entscheidungen eines KI-Kapitäns (statisch), der Node reicht sie nur weiter |
 | `TradeMath` | Preisbildung aus Lagerbestand |
 | `OceanWaves` | Wellenfeld — **doppelt vorhanden**, siehe unten |
@@ -166,6 +169,36 @@ Schussrichtung länger ist.
 **`Ship.readiness()`, nicht `crew_fraction()`.** Mannschaft zählt im Gefecht erst, was über
 `min_crew` hinausgeht; zwei Mann je Rohr für volle Ladegeschwindigkeit. `crew_fraction()`
 bleibt für die Moral (`Gunnery.will_strike`) — wer aufgibt, zählt Köpfe, nicht Bedienung.
+
+### Zwei Wege zur Prise
+
+**Schießen oder entern.** Ein Gegner, der die Flagge gestrichen hat, wird mit der Leertaste
+ausgeräumt (`NavalCombat.take_prize`, 110 m). Einer, der noch kämpft, lässt sich stürmen
+(`NavalCombat.board`, 45 m) — schneller, aber es kostet Leute, die danach an Schoten und
+Rohren fehlen. Das ist die Stelle, an der Mannschaft zum ersten Mal etwas ist, das man
+*einsetzt*, statt nur zu verlieren.
+
+Der Ausgang ist ein Wurf, kein Taktikgefecht: `Boarding.odds()` liefert den Anteil des
+Angreifers an der Gesamtstärke, und **dieselbe Zahl** entscheidet über Sieg *und* über die
+Verluste beider Seiten — ein aussichtsloser Sturm ist ein Gemetzel, ein übermächtiger
+kostet fast nichts. Verteidigen ist im Vorteil (`DEFENCE_BONUS`), ein zerschossener Rumpf
+nimmt den Verteidigern den Mut (`HULL_MORALE`), Berüchtigtheit hilft dem Angreifer
+(`FEAR_BONUS`). Das taktische Deckgefecht aus `docs/KONZEPT.md` 3.4 ist Tier 1 und braucht
+Offiziere, die es noch nicht gibt.
+
+**Eine erbeutete Prise lässt sich noch nicht behalten** — sie wird ausgeräumt und treibt
+davon (`NavalCombat._release`). Das ist eine Lücke, kein Entwurf: Das Prisenschiff zu
+übernehmen gehört zu M5 und ist nur zurückgestellt. **Nicht mit Flottenführung verwechseln**
+— *ein* Schiff gegen das eigene tauschen ist M5, *mehrere* Schiffe führen ist 5.4 und
+Tier 2.
+
+### Drei Aufforderungen, eine Taste
+
+Prise, Entern und Anlegen liegen alle auf der Leertaste und teilen sich eine Zeile im HUD.
+Die Reihenfolge steht an **zwei** Stellen und muss dieselbe sein: `SailingMode._unhandled_input`
+entscheidet, was passiert, `SailingHud._refresh_prompt` schreibt, was dasteht. Vorher hat
+jedes der drei Signale die Zeile für sich überschrieben — dann verschwand die Hafen-
+aufforderung, weil ein Gegner außer Enterreichweite geriet.
 
 ### Höhen: mathematisch ≠ gezeichnet
 

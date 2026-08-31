@@ -723,23 +723,24 @@ func _assign_economy() -> void:
 		var produced: Array[StringName] = []
 		var raw_count := 1 if town.size_tier == 0 else 2
 		for i in raw_count:
-			var good := raw[rng.randi() % raw.size()]
-			if good in produced:
+			var good := _draw_good(raw, produced)
+			if good.is_empty():
 				continue
 			produced.append(good)
 			town.production[good] = float(rng.randi_range(8, 20) * (town.size_tier + 1))
 
 		# Groessere Staedte verarbeiten zusaetzlich.
 		if town.size_tier >= 1:
-			var refined := finished[rng.randi() % finished.size()]
-			produced.append(refined)
-			town.production[refined] = float(rng.randi_range(5, 12) * town.size_tier)
+			var refined := _draw_good(finished, produced)
+			if not refined.is_empty():
+				produced.append(refined)
+				town.production[refined] = float(rng.randi_range(5, 12) * town.size_tier)
 
 		var wanted := 2 + town.size_tier
 		for i in wanted:
 			var pool := finished if rng.randf() > 0.4 else raw
-			var good := pool[rng.randi() % pool.size()]
-			if good in produced or town.demand.has(good):
+			var good := _draw_good(pool, produced + town.demand.keys())
+			if good.is_empty():
 				continue
 			town.demand[good] = float(rng.randi_range(6, 18) * (town.size_tier + 1))
 
@@ -749,6 +750,28 @@ func _assign_economy() -> void:
 		# Man haette Holz an jedes Dorf zum Doppelten verkaufen koennen.
 		for cargo_id: StringName in CargoRegistry.ids():
 			town.stock[cargo_id] = town.target_stock(cargo_id)
+
+
+## Zieht eine Ware aus [param pool], die noch nicht in [param taken] steht.
+## Leerer Name heisst: Der Vorrat ist erschoepft.
+##
+## Frueher wurde einmal gezogen und ein Treffer uebersprungen. Das ging solange
+## gut, wie der Vorrat gross war - beim Kuerzen von zwoelf auf neun Waren fiel
+## der Bedarf einer Hauptstadt von 2,75 auf 2,00 und lag damit unter dem eines
+## Dorfes, weil bei ihr am meisten gezogen wird und am meisten schon vergeben
+## ist. Eine Stadt ohne Bedarf ist ein Hafen, in dem sich nichts verkaufen
+## laesst; genau eine hatte es getroffen.
+##
+## Die Schleife laeuft ueber die Vorratsgroesse, nicht ueber eine feste Zahl
+## Versuche: So bleibt die Zahl der gezogenen Zufallswerte allein von der
+## Vorratsgroesse abhaengig und damit fuer denselben Seed dieselbe.
+func _draw_good(pool: Array[StringName], taken: Array) -> StringName:
+	var start := rng.randi() % pool.size()
+	for offset in pool.size():
+		var good := pool[(start + offset) % pool.size()]
+		if not (good in taken):
+			return good
+	return &""
 
 
 func _shuffle(array: PackedInt32Array) -> void:

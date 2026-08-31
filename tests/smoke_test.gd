@@ -39,6 +39,7 @@ func _ready() -> void:
 	_check_ship_ai()
 	_check_ship_combat()
 	_check_prize()
+	await _check_boarding()
 	_check_hiring()
 	await _check_debug_knobs()
 	await _check_duel()
@@ -126,7 +127,7 @@ func _check_save_roundtrip() -> void:
 	# Ein leergekauftes Lager ist die einzige Abweichung, die eine Stadt vom
 	# generierten Zustand haben kann - genau die muss der Spielstand halten.
 	var plundered: TownData = WorldData.towns[0]
-	plundered.stock[&"sugar"] = 3.0
+	plundered.stock[&"tobacco"] = 3.0
 	plundered.discovered = true
 
 	_assert(SaveManager.save_slot(99), "Spielstand geschrieben")
@@ -145,7 +146,7 @@ func _check_save_roundtrip() -> void:
 	_assert(GameState.cargo_of(&"cannons") == 2, "Zweite Ladung wiederhergestellt")
 	_assert(GameState.ship_class != null, "Schiffsklasse wiederhergestellt")
 	_assert(GameState.current_port_id == 0, "Liegeplatz wiederhergestellt")
-	_assert(is_equal_approx(WorldData.towns[0].stock_of(&"sugar"), 3.0),
+	_assert(is_equal_approx(WorldData.towns[0].stock_of(&"tobacco"), 3.0),
 		"Lagerbestand der Stadt wiederhergestellt")
 	_assert(WorldData.towns[0].discovered, "Besuchte Stadt bleibt bekannt")
 
@@ -378,6 +379,10 @@ func _check_world_generation() -> void:
 			in_range = false
 	_assert(in_range, "Hoehenfunktion bleibt in 0 bis 1")
 
+	# Ganz zum Schluss, weil es selbst Welten erzeugt: Alles davor vergleicht
+	# die gerade erzeugte Welt mit sich selbst.
+	_check_trade_supply()
+
 
 ## Laedt jedes Skript und jede Szene des Projekts.
 ##
@@ -390,6 +395,49 @@ func _check_world_generation() -> void:
 ## Hier stand das Schiff nach dem Auslaufen im Berg: Die Richtung "vom
 ## Inselmittelpunkt weg" zeigt bei langgestreckten Inseln an der Kueste
 ## entlang, nicht aufs Meer.
+## Reicht der Warenvorrat fuer den Handel, den die Staedte anbieten sollen?
+##
+## Diese Pruefung entstand beim Kuerzen von zwoelf Waren auf neun. Die Zuteilung
+## zog eine Ware und uebersprang sie, wenn die Stadt sie schon hatte - sie zog
+## nicht neu. Bei zwoelf Waren fiel das nie auf; bei neun sank der Bedarf einer
+## Hauptstadt unter den eines Dorfes, und eine Stadt hatte gar keinen mehr.
+##
+## Ueber mehrere Seeds, nicht ueber einen: Die vorhandene Pruefung "jede Stadt
+## braucht etwas" gab es bereits und lief trotzdem durch - der eine Seed des
+## Rauchtests war zufaellig in Ordnung.
+##
+## ACHTUNG: Diese Pruefung erzeugt selbst Welten und laeuft deshalb als letzte
+## in ihrem Block. Mitten hineingestellt hat sie die Determinismus-Pruefung
+## umgeworfen, die sich die Staedtenamen der gerade erzeugten Welt merkt.
+func _check_trade_supply() -> void:
+	var seeds := [7, 99, 2024, 31337]
+	var per_tier := {0: [0, 0], 1: [0, 0], 2: [0, 0]}
+	var starving := 0
+	var towns := 0
+	for world_seed: int in seeds:
+		WorldData.generate(world_seed)
+		for town: TownData in WorldData.towns:
+			towns += 1
+			if town.demand.is_empty():
+				starving += 1
+			var slot: Array = per_tier[clampi(town.size_tier, 0, 2)]
+			slot[0] += 1
+			slot[1] += town.demand.size()
+
+	_assert(towns > 0, "Die Stichprobe hat Staedte (%d)" % towns)
+	_assert(starving == 0,
+		"Keine Stadt bleibt ohne Bedarf - sonst ist es ein Hafen, in dem sich " 		+ "nichts verkaufen laesst (%d von %d)" % [starving, towns])
+
+	# Wer groesser ist, fragt mehr nach. Das ist die Ordnung, die gekippt war:
+	# Eine Hauptstadt lag unter dem Dorf, weil bei ihr am meisten gezogen wird
+	# und am meisten schon vergeben ist.
+	var village := float(per_tier[0][1]) / float(maxi(per_tier[0][0], 1))
+	var capital := float(per_tier[2][1]) / float(maxi(per_tier[2][0], 1))
+	_assert(capital > village,
+		"Eine Hauptstadt fragt mehr nach als ein Dorf (%.2f gegen %.2f)"
+		% [capital, village])
+
+
 func _check_anchorages() -> void:
 	for world_seed: int in [42, 1337, 90210]:
 		WorldData.generate(world_seed)
@@ -701,7 +749,7 @@ func _check_market() -> void:
 ## Das ist das Abnahmekriterium des Meilensteins - deshalb wird es gefahren
 ## und nicht nur behauptet.
 func _check_trade_loop() -> void:
-	var cargo := CargoRegistry.get_cargo(&"sugar")
+	var cargo := CargoRegistry.get_cargo(&"tobacco")
 	var cheapest: TownData = null
 	var dearest: TownData = null
 	for town: TownData in WorldData.towns:
@@ -748,7 +796,7 @@ func _check_docking_reach() -> void:
 
 func _check_trade_limits() -> void:
 	var town: TownData = WorldData.towns[0]
-	var cargo := CargoRegistry.get_cargo(&"sugar")
+	var cargo := CargoRegistry.get_cargo(&"tobacco")
 
 	GameState.gold = 0
 	_assert(Trade.max_buyable(town, cargo) == 0, "Ohne Gold kein Kauf")
@@ -773,7 +821,7 @@ func _check_trade_limits() -> void:
 
 func _check_trade_bookkeeping() -> void:
 	var town: TownData = WorldData.towns[0]
-	var cargo := CargoRegistry.get_cargo(&"sugar")
+	var cargo := CargoRegistry.get_cargo(&"tobacco")
 	town.stock[cargo.id] = 200.0
 
 	GameState.gold = 5000
@@ -1284,7 +1332,7 @@ func _check_ship_combat() -> void:
 		"Und damit Ladezeit")
 	# Sechs von achtzehn Mann: Das Schiff kriecht noch, faehrt aber nicht mehr.
 	_assert(ship.handling() < 1.0, "Unter der Mindestbesatzung leidet auch die Fahrt")
-	_assert(ship.handling() >= Ship.MIN_HANDLING, "Ganz stehen bleibt es aber nicht")
+	_assert(ship.handling() >= SailingMath.MIN_HANDLING, "Ganz stehen bleibt es aber nicht")
 
 	ship.strike()
 	_assert(ship.struck, "Ein Schiff kann die Flagge streichen")
@@ -1313,6 +1361,158 @@ func _make_ship(class_path: String) -> Ship:
 	ship.apply_class(load(class_path))
 	return ship
 
+
+
+## Das Entern - der zweite Weg zur Prise.
+func _check_boarding() -> void:
+	GameState.new_campaign("Enterer", 4711)
+	var rng := RandomNumberGenerator.new()
+	rng.seed = 99
+
+	# Reichweite: Entern ist ein Manoever, kein Knopf. Es muss deutlich enger
+	# sein als das Ausraeumen einer Prise, sonst faehrt niemand laengsseit.
+	_assert(Boarding.REACH < NavalCombat.PRIZE_RANGE,
+		"Entern verlangt naeher heran als eine Prise auszuraeumen")
+	_assert(Boarding.can_board(Boarding.REACH - 1.0, 30, false, false),
+		"Dicht genug und der Gegner kaempft noch: uebersetzen geht")
+	_assert(not Boarding.can_board(Boarding.REACH + 1.0, 30, false, false),
+		"Zu weit weg geht niemand hinueber")
+	_assert(not Boarding.can_board(10.0, 30, true, false),
+		"Ein gestrichenes Schiff wird ausgeraeumt, nicht gestuermt")
+	_assert(not Boarding.can_board(10.0, 30, false, true),
+		"Ein gesunkenes erst recht nicht")
+	_assert(not Boarding.can_board(10.0, 0, false, false),
+		"Ohne Leute an Bord entert niemand")
+
+	# Verteidigen ist leichter als uebersetzen. Bei gleicher Mannschaft muss
+	# der Angreifer verlieren - sonst waere Entern immer die richtige Antwort
+	# und das ganze Schiessen ueberfluessig.
+	var even := Boarding.odds(
+		Boarding.attack_strength(30, 0.0),
+		Boarding.defence_strength(30, 1.0)
+	)
+	_assert(even < 0.5,
+		"Gleiche Mannschaft, unversehrter Gegner: der Sturm steht schlecht (%.2f)" % even)
+
+	var outnumbering := Boarding.odds(
+		Boarding.attack_strength(60, 0.0),
+		Boarding.defence_strength(30, 1.0)
+	)
+	_assert(outnumbering > even, "Ueberzahl hilft")
+
+	# Beruechtigtheit ist an Deck etwas wert - der gefuerchtete Pirat aus
+	# KONZEPT 3.4, der gewinnt, ohne einen Schuss abzugeben.
+	var feared := Boarding.odds(
+		Boarding.attack_strength(30, 1.0),
+		Boarding.defence_strength(30, 1.0)
+	)
+	_assert(feared > even, "Ein gefuerchteter Kapitaen kaempft mit Rueckenwind")
+
+	# Und eine Breitseite vorher lohnt sich, auch wenn sie den Gegner nicht
+	# zum Streichen bringt: Ein zerschossener Rumpf nimmt den Mut.
+	var battered := Boarding.odds(
+		Boarding.attack_strength(30, 0.0),
+		Boarding.defence_strength(30, 0.2)
+	)
+	_assert(battered > even, "Gegen einen angeschlagenen Rumpf steht der Sturm besser")
+
+	# Verluste: Wer die schwaechere Seite ist, zahlt mehr. Und niemand kommt
+	# ohne Gefallene zurueck.
+	var hopeless := Boarding.resolve(rng, 5, 0.0, 80, 1.0)
+	var overwhelming := Boarding.resolve(rng, 80, 0.0, 5, 1.0)
+	_assert(hopeless.attacker_losses > 0 and hopeless.defender_losses > 0,
+		"Ein Enterkampf kostet immer Leute auf beiden Seiten")
+	_assert(
+		float(hopeless.attacker_losses) / 5.0
+			> float(overwhelming.attacker_losses) / 80.0,
+		"Ein aussichtsloser Sturm ist ein Gemetzel (%d von 5 gegen %d von 80)"
+		% [hopeless.attacker_losses, overwhelming.attacker_losses])
+	_assert(hopeless.attacker_losses <= 5 and hopeless.defender_losses <= 80,
+		"Es fallen nie mehr Leute, als an Bord waren")
+
+	# Ueber viele Laeufe muss die Ueberzahl sich durchsetzen - sonst waere die
+	# Entscheidung, laengsseit zu gehen, ein reiner Wurf.
+	var strong_wins := 0
+	var weak_wins := 0
+	for i in 400:
+		if Boarding.resolve(rng, 60, 0.0, 20, 1.0).won:
+			strong_wins += 1
+		if Boarding.resolve(rng, 20, 0.0, 60, 1.0).won:
+			weak_wins += 1
+	_assert(strong_wins > 240,
+		"Dreifache Ueberzahl nimmt das Deck meistens (%d von 400)" % strong_wins)
+	_assert(weak_wins < 140,
+		"Dreifache Unterzahl meistens nicht (%d von 400)" % weak_wins)
+
+	await _check_boarding_at_sea()
+
+
+## Und dasselbe durch die Szene gefahren, nicht nur gerechnet (Regel C6).
+func _check_boarding_at_sea() -> void:
+	GameState.new_campaign("Enterer", 4711)
+
+	var combat := NavalCombat.new()
+	combat.max_ships = 0
+	add_child(combat)
+
+	var mine := _make_ship("res://resources/ships/sloop.tres")
+	mine.global_position = Vector3.ZERO
+	combat.setup(mine)
+	# Fester Wuerfel - und zwar NACH setup(), das ruft rng.randomize() auf und
+	# wuerfe einen vorher gesetzten Seed weg. Bei vierzig gegen zwei faellt der
+	# Sturm zu etwa 94 Prozent; ohne festen Seed war die Pruefung also in jedem
+	# sechzehnten Lauf rot, ohne dass irgendetwas kaputt gewesen waere.
+	combat.rng.seed = 12345
+
+	var victim := _make_ship("res://resources/ships/merchant_brig.tres")
+	victim.ship_name = "Testopfer"
+	victim.nation_id = 0
+	victim.crew = 2
+	victim.global_position = Vector3(600.0, 0.0, 0.0)
+	combat.adopt(victim)
+
+	_assert(combat.boarding_in_reach() == null, "Auf 600 Metern entert niemand")
+	victim.global_position = Vector3(Boarding.REACH - 5.0, 0.0, 0.0)
+	await get_tree().physics_frame
+	_assert(combat.boarding_in_reach() == victim, "Laengsseit schon")
+
+	var crew_before := mine.crew
+	# Die Verluste muessen ueber condition_changed nach draussen gemeldet werden -
+	# daran haengt SailingMode._on_condition_changed und damit der Spielstand.
+	# Der Segelmodus selbst laeuft hier nicht, das Signal schon.
+	var reported := [-1]
+	mine.condition_changed.connect(
+		func(_hull: int, _sails: int, crew: int) -> void: reported[0] = crew
+	)
+	var outcome := combat.board(victim)
+	_assert(outcome != null, "Der Sturm wird ausgefochten")
+	_assert(outcome.won, "Vierzig gegen zwei nimmt das Deck")
+	_assert(victim.struck, "Und der Gegner streicht die Flagge")
+	_assert(mine.crew < crew_before,
+		"Auch ein gewonnener Sturm kostet Leute (%d von %d)"
+		% [crew_before - mine.crew, crew_before])
+	_assert(reported[0] == mine.crew,
+		"Und der Verlust wird gemeldet, damit der Spielstand ihn mitbekommt")
+
+	# Danach ist er eine Prise, kein Enterziel mehr - die beiden Wege duerfen
+	# sich nicht ueberschneiden, sonst stuermt man ein Schiff zweimal.
+	_assert(combat.boarding_in_reach() == null,
+		"Ein geentertes Schiff wird ausgeraeumt, nicht noch einmal gestuermt")
+	_assert(combat.prize_in_reach() == victim, "Es liegt jetzt als Prise da")
+
+	# Und die Enterhaken sind erst wieder klar, wenn Zeit vergangen ist.
+	_assert(combat.grapple_recovery() > 0.0, "Nach einem Sturm sind die Haken unklar")
+
+	var second := _make_ship("res://resources/ships/merchant_brig.tres")
+	second.crew = 2
+	second.global_position = Vector3(0.0, 0.0, Boarding.REACH - 5.0)
+	combat.adopt(second)
+	await get_tree().physics_frame
+	_assert(combat.boarding_in_reach() == null,
+		"Solange sie unklar sind, geht auch auf ein zweites Schiff niemand hinueber")
+
+	combat.queue_free()
+	mine.queue_free()
 
 
 ## Die Werft ersetzt auch Leute - seit M4 kostet ein Gefecht Mannschaft.
@@ -1356,6 +1556,32 @@ func _check_hiring() -> void:
 	_assert(GameState.crew == GameState.max_crew(),
 		"Mehr Leute als Kojen gibt es nicht")
 
+	# Die Fahrt haengt an der Mindestbesatzung, nicht an der Hoechstzahl. Das
+	# HUD und die Werft zeigen es an, also muss die Schwelle stimmen: genau auf
+	# min_crew faehrt das Schiff noch voll, einen Mann darunter nicht mehr.
+	_assert(GameState.min_crew() > 0, "Auch die Mindestbesatzung steht in der Klasse")
+	GameState.crew = GameState.max_crew()
+	_assert(is_equal_approx(GameState.handling(), 1.0),
+		"Voll besetzt faehrt das Schiff voll")
+	GameState.crew = GameState.min_crew()
+	_assert(is_equal_approx(GameState.handling(), 1.0),
+		"Genau auf der Mindestbesatzung noch immer")
+	GameState.crew = GameState.min_crew() - 1
+	_assert(GameState.handling() < 1.0,
+		"Einen Mann darunter kostet es Fahrt - genau das zeigt das HUD an")
+	GameState.crew = 0
+	_assert(is_equal_approx(GameState.handling(), SailingMath.MIN_HANDLING),
+		"Ganz stehen bleibt das Schiff aber nie")
+
+	# Schiff und GameState duerfen nicht zwei Fassungen derselben Formel haben -
+	# sonst zeigt das HUD im Hafen etwas anderes an als auf See.
+	var afloat := _make_ship("res://resources/ships/sloop.tres")
+	afloat.crew = afloat.min_crew - 1
+	GameState.crew = afloat.crew
+	_assert(is_equal_approx(afloat.handling(), GameState.handling()),
+		"Schiff und Spielstand rechnen die Fahrbarkeit gleich")
+	afloat.queue_free()
+
 
 func _town_of_tier(tier: int) -> TownData:
 	for town: TownData in WorldData.towns:
@@ -1383,7 +1609,7 @@ func _check_prize() -> void:
 	prize.ship_name = "Testprise"
 	prize.nation_id = 0
 	prize.gold = 450
-	prize.cargo = {&"sugar": 30, &"rum": 25}
+	prize.cargo = {&"tobacco": 30, &"rum": 25}
 	prize.global_position = Vector3(600.0, 0.0, 0.0)
 	combat.adopt(prize)
 
@@ -1409,12 +1635,12 @@ func _check_prize() -> void:
 	# Ein verlorenes Gefecht beendet keinen Lauf - es verteuert ihn.
 	GameState.gold = 900
 	GameState.cargo.clear()
-	GameState.add_cargo(&"tools", 10)
+	GameState.add_cargo(&"cloth", 10)
 	mine.take_hit(Gunnery.Zone.HULL, 9999)
 
 	_assert(GameState.gold < 900, "Wer verliert, wird ausgeraubt (%d Gold uebrig)"
 		% GameState.gold)
-	_assert(GameState.cargo_of(&"tools") == 5, "Die halbe Ladung geht ueber Bord")
+	_assert(GameState.cargo_of(&"cloth") == 5, "Die halbe Ladung geht ueber Bord")
 	_assert(mine.hull > 0, "Das eigene Schiff bleibt ueber Wasser")
 	_assert(not mine.finished, "Der Lauf geht weiter")
 

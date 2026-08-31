@@ -72,7 +72,7 @@ func _cheapest_cargo(town: TownData) -> CargoType:
 		if ratio < best_ratio:
 			best_ratio = ratio
 			best = cargo
-	return best if best != null else CargoRegistry.get_cargo(&"sugar")
+	return best if best != null else CargoRegistry.get_cargo(&"tobacco")
 
 
 func _nation_name(town: TownData) -> String:

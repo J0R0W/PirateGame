@@ -3,10 +3,11 @@
 Ein Piraten-Sandbox-Spiel in der Tradition von *Sid Meier's Pirates!*, gebaut mit Godot 4.7.
 3D-Präsentation, prozedural erzeugte Karibik, eigene Systeme statt originalgetreuem Nachbau.
 
-**Status:** M4 abgeschlossen — es gibt eine Spielschleife und ein Gefecht. Segeln, in einem
-Hafen anlegen, günstig kaufen, woanders teuer verkaufen, das Schiff instand setzen — und
-unterwegs ein fremdes Segel längsseits nehmen.
-Als Nächstes M5: Entern und Progression.
+**Status:** M4 abgeschlossen, M5 angefangen — es gibt eine Spielschleife und ein Gefecht.
+Segeln, in einem Hafen anlegen, günstig kaufen, woanders teuer verkaufen, das Schiff instand
+setzen, Leute anheuern — und unterwegs ein fremdes Segel längsseits nehmen. Seit Neuestem auf
+zwei Wegen: zusammenschießen, bis die Flagge fällt, oder übersetzen und es an Deck ausfechten.
+Offen aus M5: der Schiffskauf und die Übernahme einer Prise — und damit der eigentliche Aufstieg.
 
 ## Dokumentation
 
@@ -27,20 +28,24 @@ godot --path .
 godot --headless --path . res://tests/smoke_test.tscn
 ```
 
-381 Prüfungen: Autoloads, Eingabebelegung, Kampagnenstart, Speicher-Roundtrip,
+413 Prüfungen: Autoloads, Eingabebelegung, Kampagnenstart, Speicher-Roundtrip,
 Segelmathematik, Winkelkonvention, Wellenfeld, Schiffsgeometrie, Weltgenerierung
 (Landanteil, Weltrand, Hafenabstände, Nationsbesitz, Determinismus), Ankerplätze,
-Stadtterrassen, Siedlungen, Preisbildung, Handel, Werft, Anheuern, Ballistik,
-Vorhalten, Trefferentscheid, Trefferzonen, Schiffs-KI, Prisen, die Stellschrauben des Debug-Menüs sowie Gelände-Chunks,
-Grundberührung, Projektregeln und die Frage, ob überhaupt jedes Skript kompiliert.
+Stadtterrassen, Siedlungen, Preisbildung, Handel, Werft, Anheuern, Fahrbarkeit unter der
+Mindestbesatzung, Ballistik, Vorhalten, Trefferentscheid, Trefferzonen, Schiffs-KI, Prisen,
+Enterkämpfe, die Stellschrauben des Debug-Menüs sowie Gelände-Chunks, Grundberührung,
+Projektregeln und die Frage, ob überhaupt jedes Skript kompiliert.
 
 Darunter die Abnahmebedingungen der Meilensteine selbst, gefahren statt behauptet:
 
-- **M3** — 20 Fass Zucker im billigsten Hafen kaufen, im teuersten verkaufen. Die Fahrt
+- **M3** — 20 Ballen Tabak im billigsten Hafen kaufen, im teuersten verkaufen. Die Fahrt
   muss Gewinn abwerfen, die Route rückwärts Verlust.
 - **M4** — zweimal dasselbe Gefecht mit demselben Würfel, einmal mit einem Kapitän, der
   den Gegner querab hält, einmal mit einem, der drauflosfährt. 123 gegen 18 Punkte
   Schaden, und nur der erste zwingt den Gegner zur Flagge.
+- **M5 (teilweise)** — ein Gegner wird wirklich geentert: längsseits gehen, übersetzen, das
+  Deck nehmen, und danach liegt er als Prise da statt als Enterziel. Die Enterhaken bleiben
+  danach eine Weile unklar.
 
 Das Gefecht wird dabei wirklich gefahren — zwei volle Duelle im Zeitraffer, deshalb
 dauert der Durchlauf gut eine halbe Minute. Exit-Code 0 = bestanden.
@@ -154,7 +159,7 @@ auf, sobald man hinsieht.
 | W / S | Segel setzen / reffen |
 | Mausrad | Kamera heran und weg |
 | Q / E | Breitseite backbord / steuerbord |
-| Leertaste | Anlegen — oder eine gestrichene Flagge aufbringen |
+| Leertaste | Anlegen — eine gestrichene Flagge aufbringen — oder einen Gegner entern, der noch kämpft |
 | M | Seekarte |
 | F3 | Debug-Menü |
 | Esc | Offenes Fenster schließen, sonst zurück ins Menü |

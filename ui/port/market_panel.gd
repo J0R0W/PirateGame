@@ -139,7 +139,7 @@ func refresh() -> void:
 ## Preis, beim Verkauf ein hoher.
 ##
 ## Die Gegenrichtung wird abgeblendet statt rot eingefaerbt. Rot ist im Spiel
-## die Farbe fuer Schaden und Gefahr - ein maessiger Zuckerpreis ist keine
+## die Farbe fuer Schaden und Gefahr - ein maessiger Tabakpreis ist keine
 ## Gefahr, und zwoelf rote Zahlen in einer Liste laesst die Farbe ihre
 ## Bedeutung verlieren. Siehe RICHTLINIEN A4.
 func _price_color(price: int, base_price: int, buying: bool) -> Color:

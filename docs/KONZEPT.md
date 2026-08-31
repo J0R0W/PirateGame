@@ -41,6 +41,15 @@ Da eigene Ideen gewünscht sind, weicht dieses Konzept an vier Stellen ab:
   freiwilligen Rückzug.
 - **Crew ist eine Person, keine Zahl.** Siehe Signature Feature "Mannschaft & Meuterei".
 
+### Ein optionaler Erzählstrang
+
+Über der Sandbox liegt ein politisch-intriganter Handlungsstrang — Details in `docs/STORY.md`.
+Er beginnt mit der Kampagne, lässt sich aber jederzeit ignorieren: Ein Dokument bringt den
+Spieler zwischen die vier Kolonialmächte, drei Pfade (Kampf & Furcht, Diplomatie & Beziehungen,
+Entdeckung & Wissen) führen zu einem Wendepunkt, der dauerhaft in `GameState` geschrieben wird —
+danach läuft dieselbe offene Sandbox weiter. Kein Cutscene-Ende, kein Widerspruch zu "Kein
+Story-Spiel mit festem Ende" oben: Der Strang schließt sich, das Spiel nicht.
+
 ---
 
 ## 2. Der Kern-Loop
@@ -214,7 +223,7 @@ Seed
  │      Nation (span./engl./frz./niederl. Klang).
  │
  └─► 7. WIRTSCHAFT       Jede Stadt bekommt Produktion & Bedarf
-        (Zucker, Rum, Tabak, Kakao, Holz, Kanonen, Stoffe...)
+        (Tabak, Rum, Kakao, Holz, Gewürze, Kanonen, Stoffe...)
         abhängig von Inselgröße, Nation und Zufall.
         → erzeugt automatisch profitable Handelsrouten.
 ```
@@ -323,6 +332,15 @@ Was wann gebaut wird. **Tier 0 ist das Spiel.** Alles andere ist Ausbau.
 - [ ] Optionen, Barrierefreiheit, Rebinding
 - [ ] Steam-Build / Export-Pipeline
 - [ ] Lokalisierung (DE/EN)
+
+### Tier 4 — Mehrspieler *(erst nach Abschluss des Einzelspielers)*
+- [ ] Session-Hosting für 2–8 Spieler (kein persistenter Server)
+- [ ] Seed-Sync statt Weltübertragung
+- [ ] Ergebnis-Sync für Gefechte, nutzt B12 statt Echtzeit-Ballistik
+- [ ] Duell-Modus auf Basis von `tests/duel.tscn`
+- [ ] Geteilte/gegenläufige Pfade in der Story (Wettlauf um die vier Höfe)
+
+Details, Architektur-Vorteile und Begründung: `docs/STORY.md` Abschnitt 7.
 
 ---
 
@@ -513,7 +531,7 @@ Drei Entscheidungen darin sind wichtiger als die Formel selbst:
 **Keine Buchhaltung.** Es wandern keine Waren von Stadt zu Stadt. Jeder Bestand läuft
 stattdessen auf seinen natürlichen Wert zu — ein Erzeuger auf das Dreifache seines
 Umschlags, ein Abnehmer auf ein Viertel. Solche Modelle kippen sonst: Entweder ersäuft
-die Karibik in Zucker oder alle Lager sind nach zwei Wochen leer, und man verbringt den
+die Karibik in Tabak oder alle Lager sind nach zwei Wochen leer, und man verbringt den
 Rest des Projekts damit, Zahlen nachzuregeln.
 
 **Die Handelsspanne.** Kaufen und sofort zurückverkaufen *muss* Geld kosten. Ohne diese
@@ -591,6 +609,49 @@ Grad reichte das nicht mehr: Der Platz fährt mit, ein Verfolger mit vier Knoten
 braucht Minuten, um ihn einzuholen, und solange steht der Gegner schräg voraus. Gemessen
 mit `tests/duel.tscn` — zwölf Prozent der Zeit lag ein Rohr an. Mit der Spirale sind es
 fünfundfünfzig.
+
+### 7.8b Das Entern — die zweite Antwort
+
+Bis M4 führte genau ein Weg zur Prise: den Gegner beschießen, bis er streicht. Damit war
+Mannschaft im Gefecht nur etwas, das man *verliert* — ein Nachteil, den man erleidet, ohne
+ihn je einsetzen zu können. `Ship.readiness()` behauptet seit M4 im eigenen Kommentar, die
+ersten Verluste kosteten „Enterstärke". Es gab keine.
+
+Jetzt gibt es zwei Antworten auf ein fremdes Segel, und sie kosten Verschiedenes:
+
+| | Reichweite | Kosten | Dauer |
+|---|---|---|---|
+| **Zusammenschießen** | 420 m | Zeit, Pulver, eigener Rumpf | Minuten |
+| **Entern** | 45 m | Leute | ein Zug |
+
+Der Ausgang ist ein **Wurf, kein Taktikgefecht** — Abschnitt 6 sieht das für Tier 0
+ausdrücklich so vor; das Gitterfeld aus 3.4 ist Tier 1 und braucht Offiziere, die es noch
+nicht gibt.
+
+Die ganze Auflösung hängt an einer Zahl: `Boarding.odds()`, der Anteil des Angreifers an der
+Gesamtstärke. Sie ist zugleich seine Siegchance **und** das Maß für die Verluste beider
+Seiten. Damit braucht es keine getrennte Regel für Sieger und Verlierer: Ein aussichtsloser
+Sturm ist ein Gemetzel für den Angreifer, ein übermächtiger kostet fast nichts, und ein
+Gefecht auf Augenhöhe kostet beide die Hälfte.
+
+Drei Dinge verschieben sie:
+
+- **Verteidigen ist im Vorteil** (`DEFENCE_BONUS` 1,35). Bei gleicher Mannschaft steht der
+  Sturm auf 0,43 — schlecht. Ohne diesen Faktor wäre Entern immer die richtige Antwort und
+  das ganze Schießen überflüssig.
+- **Ein zerschossener Rumpf nimmt den Mut** (`HULL_MORALE`). Deshalb lohnt eine Breitseite
+  vor dem Übersetzen, auch wenn sie den Gegner nicht zum Streichen bringt.
+- **Berüchtigtheit zählt an Deck** (`FEAR_BONUS`). Bei 100 kämpft die eigene Mannschaft wie
+  ein gutes Drittel mehr Leute — der gefürchtete Pirat aus 3.4, der Gefechte gewinnt, ohne
+  einen Schuss abzugeben.
+
+In Zahlen der aktuellen Klassen: Eine volle Schaluppe (40 Mann) gegen eine unversehrte
+Handelsbrigg (26) steht auf 0,53 — knapp lohnend. Gegen eine unversehrte
+Patrouillenschaluppe (46) auf 0,39 — dafür muss man erst schießen oder sich einen Ruf
+erarbeitet haben. Genau diese Abwägung soll die Mechanik tragen.
+
+Nach einem Sturm sind die Enterhaken 25 Sekunden unklar (`RECOVERY_SECONDS`). Ohne diese
+Sperre wäre ein abgeschlagener Sturm nur ein zweiter Tastendruck.
 
 ### 7.9 Ordnerstruktur
 
@@ -683,8 +744,14 @@ Kanonen, Geschosse, Trefferzonen, Schadensmodell, Schiffs-KI (Verfolgen, Manövr
 Fliehen), Beute.
 > **Fertig, wenn:** Ein Gefecht gegen ein KI-Schiff spannend ist und Manövrieren belohnt wird.
 
-### M5 — Entern & Progression *(4–5 Wochen)*  ← als Nächstes
-Taktisches Enter-Gefecht, Crew, Schiffsklassen, Schiffskauf, Speichern/Laden.
+### M5 — Entern & Progression *(4–5 Wochen)*  ← läuft
+Enter-Gefecht, Crew, Schiffsklassen, Schiffskauf, Speichern/Laden.
+Speichern/Laden, Crew und die Schiffsklassen stehen seit M3/M4; das Entern ist gebaut — als
+Wurf-Auflösung, wie es Abschnitt 6 für Tier 0 vorsieht (siehe 7.8b). Das taktische
+Deckgefecht aus 3.4 bleibt Tier 1: Es braucht Offiziere, die es noch nicht gibt.
+**Offen: die beiden Wege zu einem besseren Schiff** — der Schiffskauf und die Übernahme
+einer Prise. Solange keiner von beiden geht, gibt es keinen Aufstieg, und die
+Abnahmebedingung ist nicht erfüllt.
 > **Fertig, wenn:** Ein kompletter Aufstieg vom Startschiff zu einem größeren Schiff spielbar ist.
 
 ### M6 — Welt reagiert *(4 Wochen)*
@@ -763,10 +830,10 @@ korrigiert — er zeigte nach unten und schwebte neben dem Rumpf, weil Godot
 Transform-Basen in `.tscn` zeilenweise speichert und eine spaltenweise gerechnete
 Rotationsmatrix dort transponiert, also als Umkehrung, ankommt.
 
-**M3 abgeschlossen.** Ab hier existiert eine Gameplay-Schleife. Zwölf Warenarten als
+**M3 abgeschlossen.** Ab hier existiert eine Gameplay-Schleife. Damals zwölf Warenarten als
 `.tres`-Dateien, ein Preismodell (Abschnitt 7.7), Anlegen bei 240 m Entfernung, ein
 Hafenbildschirm mit Markt und Werft, Auflaufen kostet Rumpf, die Werft nimmt Gold dafür.
-Der Rauchtest fährt die Abnahmebedingung selbst: 20 Fass Zucker im billigsten Hafen
+Der Rauchtest fährt die Abnahmebedingung selbst: 20 Ballen Tabak im billigsten Hafen
 gekauft und im teuersten verkauft, 3000 → 3585 Gold — und dieselbe Route rückwärts ein
 Verlust.
 
@@ -857,6 +924,42 @@ Die Abnahmebedingung im Rauchtest läuft jetzt gegen ein Kriegsschiff statt gege
 Handelsbrigg: **123 gegen 18 Punkte Schaden**, Flagge nach 30 Sekunden. Gegen einen
 Fliehenden sagt ein Duell nur, wer schneller ist.
 
+**Das Entern kam dazu** (M5, Abschnitt 7.8b). Bis dahin führte genau ein Weg zur Prise —
+den Gegner beschießen, bis er streicht. Damit war Mannschaft im Gefecht nur etwas, das man
+verliert. Jetzt lässt sich ein Gegner, der noch kämpft, auf 45 Metern stürmen: schneller
+als ihn zusammenzuschießen, aber es kostet Leute, die danach an Schoten und Rohren fehlen.
+Verteidigen ist im Vorteil, also lohnt eine Breitseite vorher; Berüchtigtheit hilft an Deck,
+also zahlt sich ein Ruf zum ersten Mal aus.
+
+**Von zwölf Waren auf neun.** Zucker, Kaffee und Werkzeug sind heraus: Zwei Rohstoffe mit
+ähnlichem Preis unterscheiden sich für den Spieler durch nichts als ihren Namen, und eine
+Marktliste, die man nicht mehr überblickt, hilft niemandem.
+
+Dabei kam ein Fehler heraus, der vorher unbemerkt Handel gekostet hat. Die Zuteilung von
+Produktion und Bedarf zog eine Ware und *übersprang* sie, wenn die Stadt sie schon hatte —
+sie zog nicht neu. Mit kleinerem Warenvorrat fiel das auf: Der Bedarf einer Hauptstadt sank
+von 2,75 auf 2,00 und lag damit unter dem eines Dorfes, und eine Stadt hatte gar keinen
+Bedarf mehr — ein Hafen, in dem sich nichts verkaufen lässt. Seit die Ziehung neu zieht,
+statt zu überspringen, steht es besser als je zuvor:
+
+| Bedarfe je Stadt | 12 Waren, alt | 9 Waren, alt | 9 Waren, neu |
+|---|---|---|---|
+| Hauptstadt | 2,75 | 2,00 | **3,25** |
+| Stadt | 2,33 | 1,33 | **3,00** |
+| Dorf | 1,86 | 1,81 | **2,00** |
+| ohne Bedarf | 0 | 1 | **0** |
+
+`tests/world_report.tscn` druckt diese Zahlen jetzt mit. Wer Waren hinzufügt oder
+herausnimmt, sieht sofort, was es mit dem Handel macht — die Warenzahl steht der Wirtschaft
+näher, als sie aussieht.
+
+**Und die Unterbesetzung wurde sichtbar.** `Ship.handling()` nimmt seit dem Umbau des
+Geschützrichtens Fahrt weg, wenn die Mannschaft unter `min_crew` fällt — nur stand das
+nirgends. Der Knotenmesser zeigte zu wenig, und das Schiff sah unbeschädigt aus. Jetzt
+nennt die Zustandszeile den Grund („3 von 8 Mann · unterbesetzt") und färbt die Fahrt rot;
+die Werft schreibt dasselbe dazu. Die Formel steht dafür in `SailingMath`, nicht mehr im
+`Ship` — HUD und Hafen brauchen sie, wenn gar kein Schiff in der Szene hängt.
+
 ---
 
 ## 11. Nächste Schritte
@@ -864,27 +967,42 @@ Fliehenden sagt ein Duell nur, wer schneller ist.
 0. **F3 drücken.** Das Debug-Menü dreht Wind, Fahrt und Begegnungen direkt — damit lassen
    sich die folgenden Fragen in Minuten beantworten statt in Stunden. „Segel setzen" holt
    sofort einen Gegner heran, statt auf ein zufälliges Treffen zu warten.
-1. **Spielen — und zwar kämpfen.** `godot --path .` starten, „Neue Kampagne", segeln, bis
-   ein fremdes Segel auftaucht. Längsseits gehen, Q oder E drücken, wenn die Anzeige
-   „liegt an" zeigt. Zwei Fragen entscheiden über M4: Dauert ein Gefecht zu lang? Und
-   merkt man, dass das Ruder mehr bringt als das Feuer?
-2. **Stellschrauben, falls nicht.** `Gunnery.RELOAD_SECONDS` (Takt des Gefechts),
-   `Gunnery.FIRING_ARC` (wie streng die Lage sein muss), `Gunnery.BASE_ACCURACY` und
-   `HULL_DAMAGE` (wie schnell es vorbei ist), `Gunnery.STRIKE_HULL` (wann aufgegeben
-   wird), `NavalCombat.SPAWN_INTERVAL` (wie oft überhaupt jemand kommt).
+1. **`godot --path . res://tests/duel.tscn`** ist der kurze Weg ins Gefecht: Man liegt sofort
+   längsseits, R holt einen frischen Gegner, G wechselt seine Klasse, H die Ausgangslage.
+   Ohne Fenster (`--headless`) fährt dieselbe Szene fünfzehn Gefechte KI gegen KI und druckt
+   die Kennzahlen — darunter **„liegt an"**, der Anteil der Zeit, in dem überhaupt ein Rohr
+   am Ziel war. Das ist die Spalte, an der man eine KI-Änderung erkennt; der Schaden je
+   Gefecht schwankt zwischen zwei Läufen um den Faktor drei und sagt gar nichts.
+2. **Stellschrauben.** `Gunnery.RELOAD_SECONDS` (Takt des Gefechts),
+   `ShipClass.gun_traverse` (wie streng die Lage sein muss — der Kegel um querab),
+   `Gunnery.HULL_DAMAGE` / `SAIL_DAMAGE` / `CREW_DAMAGE` (wie schnell es vorbei ist),
+   `Gunnery.STRIKE_HULL` (wann aufgegeben wird), `Gunnery.IDEAL_RANGE` (ab wo die Streuung
+   wächst), `NavalCombat.spawn_interval` (wie oft überhaupt jemand kommt). Fürs Entern:
+   `Boarding.DEFENCE_BONUS` (wie sehr Verteidigen im Vorteil ist), `Boarding.LOSS_RATE`
+   (was ein Sturm kostet), `Boarding.FEAR_BONUS` (was der Ruf an Deck wert ist).
 3. **`godot --path . res://tests/capture_battle.tscn`** rendert ein Gefecht in fünf
    Aufnahmen — schneller als eines zu suchen, wenn es nur um die Darstellung geht.
-4. **Erst danach M5** — Entern und Progression. Dann wird aus einer gestrichenen Flagge
-   ein Deckgefecht und aus einer Prise ein besseres Schiff. Vorher sollte sich das
-   Gefecht selbst gut anfühlen, denn M5 baut vollständig darauf auf.
+
+**Stand M5:** Das Entern ist gebaut, als Wurf-Auflösung wie in Abschnitt 6 (Tier 0)
+vorgesehen — das taktische Deckgefecht aus 3.4 ist Tier 1 und braucht Offiziere, die es
+noch nicht gibt. Damit ist die Mannschaft zum ersten Mal etwas, das man *einsetzt*, statt
+nur zu verlieren. Offen bleibt aus M5 der **Schiffskauf**: Solange ein besseres Schiff nicht
+zu haben ist, gibt es keinen Aufstieg, und M5 ist nicht abgeschlossen.
 
 Offen aus M4, bewusst zurückgestellt:
 
-- Der Ruf hat noch keine Folge. Prisen kosten Ansehen und bringen Berüchtigtheit, aber
-  niemand reagiert darauf — das ist M6.
+- Der Ruf hat noch keine Folge. Prisen kosten Ansehen und bringen Berüchtigtheit, und
+  Berüchtigtheit wirkt inzwischen an zwei Stellen — sie macht Gegner mürber
+  (`Gunnery.will_strike`) und die eigene Mannschaft an Deck stärker (`Boarding.FEAR_BONUS`).
+  Aber niemand *reagiert* darauf. Das ist M6.
 - Ein verlorenes Gefecht nimmt Gold und Ladung und setzt den Rumpf auf ein Viertel. Das
-  ist ein Platzhalter: Mit M5 gehört dorthin ein Deckgefecht und danach die Entscheidung
-  über Schiff und Mannschaft.
+  bleibt ein Platzhalter, bis die Entscheidung über Schiff und Mannschaft dazugehört.
+- **Eine erbeutete Prise lässt sich noch nicht behalten.** Sie wird ausgeräumt und treibt
+  davon (`NavalCombat._release`). Das gehört zu M5 und ist nur zurückgestellt, nicht
+  verworfen. Gemeint ist dabei ausdrücklich **ein** Schiff: das Prisenschiff gegen das eigene
+  tauschen, mit allem, was daran hängt (Ladung umladen oder verlieren, Mannschaft aufteilen,
+  der eigene Rumpf ist weg). *Mehrere* Schiffe gleichzeitig zu führen ist Flottenführung
+  (5.4) und bleibt Tier 2 — dort kommen Kapitän, Verband und Versorgung dazu.
 - Die KI flieht stur vom Gegner weg und nimmt in Kauf, dabei in den Wind gedrängt zu
   werden. Wer die Luvposition hält, kann jede Beute stellen. Das ist ein System zum
   Durchschauen und vorerst kein Fehler.

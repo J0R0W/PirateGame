@@ -29,6 +29,25 @@ const BROAD_REACH_LIMIT: float = 150.0
 ## ob das Segel zieht oder killt.
 const POINTING_MARGIN: float = 2.0
 
+## Soweit faellt die Fahrt hoechstens, wenn die Mannschaft unter die Mindest-
+## besatzung sinkt. Nicht auf null: Ein manoevrierunfaehiges Wrack, das nur
+## noch treibt, waere eine Sackgasse statt einer Niederlage.
+const MIN_HANDLING: float = 0.3
+
+
+## Wie gut ein Schiff mit dieser Mannschaft noch zu fahren ist, 0.3 bis 1.0.
+##
+## Unter der Mindestbesatzung fehlen Haende an Schoten und Rudern. Ein Schiff
+## mit zwei von vier Mann kriecht dann noch, faehrt aber nicht mehr. Der Wert
+## multipliziert die Segelwirkung, genau wie ein Loch im Tuch - beide Verluste
+## sollen sich im selben spuerbaren Ergebnis niederschlagen: Fahrt.
+##
+## Steht hier und nicht im [Ship], weil Hafenbildschirme und HUD die Zahl auch
+## brauchen, wenn kein Schiff in der Szene haengt - und weil zwei Fassungen
+## derselben Formel unweigerlich auseinanderlaufen.
+static func handling(crew: int, min_crew: int) -> float:
+	return clampf(float(crew) / float(maxi(min_crew, 1)), MIN_HANDLING, 1.0)
+
 ## Weltrichtung zu einem Navigationswinkel, in der XZ-Ebene.
 static func direction(navigation_angle: float) -> Vector2:
 	return Vector2(sin(navigation_angle), -cos(navigation_angle))

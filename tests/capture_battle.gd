@@ -68,13 +68,32 @@ func _ready() -> void:
 	await _wait(0.45)
 	await _shot("04_einschlag")
 
-	# Die Flagge streichen lassen: Danach muss die Aufforderung im HUD stehen.
-	_enemy.global_position = Vector3(spot.x + 70.0, 0.0, spot.y + 20.0)
+	# Enterreichweite: Jetzt muss im HUD die Aufforderung zum Entern stehen -
+	# und nicht die zum Anlegen oder Aufbringen. Die drei teilen sich eine
+	# Zeile und haben sich frueher gegenseitig ueberschrieben.
+	# Relativ zum Schiff, nicht zum Startpunkt: Es faehrt waehrend der Aufnahme
+	# weiter, und bei 45 Metern Enterreichweite verzeiht das keine Drift.
+	_enemy.global_position = _ship.global_position 		+ Vector3(Boarding.REACH * 0.6, 0.0, 0.0)
+	await _wait(1.0)
+	await _shot("05_enterreichweite")
+
+	# Der Sturm selbst. Die Meldung danach nennt beide Verlustzahlen - wer
+	# entert, soll die Rechnung sehen.
+	_combat.board(_enemy)
+	await _wait(0.8)
+	await _shot("06_geentert")
+
+	# Und die Folge: Unter der Mindestbesatzung faellt die Fahrt, und das steht
+	# seit M5 auch da. Vorher zeigte nur der Knotenmesser zu wenig an.
+	_ship.take_hit(Gunnery.Zone.CREW, _ship.crew - _ship.min_crew + 3)
+	await _wait(1.5)
+	await _shot("07_unterbesetzt")
+
+	# Zuletzt die gestrichene Flagge als Prise.
 	_enemy.take_hit(Gunnery.Zone.HULL, int(float(_enemy.max_hull) * 0.8))
-	_enemy.strike()
 	EventBus.ship_struck.emit(_enemy.ship_name)
 	await _wait(2.0)
-	await _shot("05_prise")
+	await _shot("08_prise")
 
 	get_tree().quit(0)
 

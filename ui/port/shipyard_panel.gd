@@ -86,10 +86,20 @@ func refresh() -> void:
 	var crew_max := GameState.max_crew()
 	_hull.text = "%d / %d" % [GameState.hull, hull_max]
 	_sails.text = "%d / %d" % [GameState.sails, sails_max]
-	_crew.text = "%d / %d" % [GameState.crew, crew_max]
+	# Die Mannschaft wird nach der Bedienung gefaerbt, nicht nach dem Anteil an
+	# der Hoechstzahl - genau wie im HUD. Eine Schaluppe faehrt mit vierzig Mann
+	# und braucht acht: Die Haelfte zu verlieren sieht nach der Haelfte aus,
+	# kostet aber noch keinen einzigen Ladevorgang. Wer unter die Mindest-
+	# besatzung faellt, verliert dagegen Fahrt, und das steht dann auch da.
+	if GameState.handling() < 1.0:
+		_crew.text = "%d / %d — unter der Mindestbesatzung von %d" % [
+			GameState.crew, crew_max, GameState.min_crew()
+		]
+	else:
+		_crew.text = "%d / %d" % [GameState.crew, crew_max]
 	PortWidgets.paint(_hull, _state_color(float(GameState.hull) / float(maxi(hull_max, 1))))
 	PortWidgets.paint(_sails, _state_color(GameState.sail_condition()))
-	PortWidgets.paint(_crew, _state_color(float(GameState.crew) / float(maxi(crew_max, 1))))
+	PortWidgets.paint(_crew, _state_color(GameState.readiness()))
 
 	_refresh_crew()
 

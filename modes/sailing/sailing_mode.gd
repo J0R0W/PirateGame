@@ -28,6 +28,8 @@ const GROUNDING_DAMAGE_PER_KNOT: float = 1.6
 var _dock_target: TownData = null
 ## Gestrichenes Schiff laengsseit, oder null.
 var _prize_target: Ship = null
+## Gegner, der noch kaempft und nah genug zum Entern liegt, oder null.
+var _boarding_target: Ship = null
 
 
 func _ready() -> void:
@@ -62,6 +64,7 @@ func _ready() -> void:
 func _process(_delta: float) -> void:
 	_update_dock_target()
 	_update_prize_target()
+	_update_boarding_target()
 	# Die Kamera rahmt das Gefecht ein, statt stur nach vorn zu sehen -
 	# querab liegt sonst ausserhalb des Bildes.
 	_camera_rig.focus = _combat.nearest_enemy(_camera_rig.focus_range)
@@ -117,6 +120,15 @@ func _update_prize_target() -> void:
 	EventBus.prize_target_changed.emit(found.ship_name if found != null else "")
 
 
+func _update_boarding_target() -> void:
+	var found := _combat.boarding_in_reach()
+	if found == _boarding_target:
+		return
+
+	_boarding_target = found
+	EventBus.boarding_target_changed.emit(found.ship_name if found != null else "")
+
+
 func _on_ran_aground(impact_speed: float) -> void:
 	var damage := maxi(1, int(round(impact_speed * GROUNDING_DAMAGE_PER_KNOT)))
 	_ship.take_hit(Gunnery.Zone.HULL, damage)
@@ -142,10 +154,14 @@ func _unhandled_input(event: InputEvent) -> void:
 		_map.toggle()
 	elif event.is_action_pressed("interact") and not _map.visible:
 		# Eine Prise geht vor: Wer laengsseit einer gestrichenen Flagge liegt,
-		# will sie ausraeumen und nicht in den Hafen davor.
+		# will sie ausraeumen und nicht in den Hafen davor. Und ausraeumen geht
+		# vor entern - ein Schiff, das schon aufgegeben hat, stuermt niemand.
 		if _prize_target != null:
 			get_viewport().set_input_as_handled()
 			_combat.take_prize(_prize_target)
+		elif _boarding_target != null:
+			get_viewport().set_input_as_handled()
+			_combat.board(_boarding_target)
 		elif _dock_target != null:
 			get_viewport().set_input_as_handled()
 			SceneRouter.enter_port(_dock_target.id)

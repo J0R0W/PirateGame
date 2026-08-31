@@ -8,8 +8,8 @@ extends Resource
 ## Stabiler Schluessel. Steht in Spielstaenden und in den Lagerlisten der
 ## Staedte, deshalb englisch und unveraenderlich - der Anzeigename darf sich
 ## aendern, dieser nie.
-@export var id: StringName = &"sugar"
-@export var display_name: String = "Zucker"
+@export var id: StringName = &"wood"
+@export var display_name: String = "Holz"
 @export var icon: Texture2D
 @export var base_price: int = 100
 ## Wie stark der Preis um den Basiswert schwanken darf (0.0-1.0). Luxus

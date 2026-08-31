@@ -129,6 +129,12 @@ func readiness() -> float:
 	return Gunnery.readiness(crew, min_crew(), slots)
 
 
+## Wie gut das Schiff mit dieser Mannschaft noch zu fahren ist, 0.3 bis 1.0.
+## Unter 1.0 nur, wenn die Mindestbesatzung unterschritten ist.
+func handling() -> float:
+	return SailingMath.handling(crew, min_crew())
+
+
 func cargo_capacity() -> int:
 	return ship_class.cargo_capacity if ship_class != null else 40
 

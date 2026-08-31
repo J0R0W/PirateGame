@@ -42,6 +42,11 @@ var combat: NavalCombat
 
 var _notice_timer: float = 0.0
 
+## Die drei Aufforderungen, die sich die Leertaste teilen. Siehe _refresh_prompt.
+var _prize_prompt: String = ""
+var _boarding_prompt: String = ""
+var _dock_prompt_text: String = ""
+
 
 func _ready() -> void:
 	_paint(_clock, Palette.HUD_DIM)
@@ -67,6 +72,8 @@ func _ready() -> void:
 	EventBus.sail_sighted.connect(_on_sail_sighted)
 	EventBus.ship_struck.connect(_on_ship_struck)
 	EventBus.prize_taken.connect(_on_prize_taken)
+	EventBus.boarding_target_changed.connect(_on_boarding_target_changed)
+	EventBus.boarding_resolved.connect(_on_boarding_resolved)
 	EventBus.player_struck.connect(_on_player_struck)
 
 
@@ -108,10 +115,24 @@ func _process(delta: float) -> void:
 		),
 		GameState.readiness()
 	)
-	_condition.text = "Rumpf %d  ·  Segel %d  ·  %d Mann" % [
-		GameState.hull, GameState.sails, GameState.crew
-	]
+
+	# Unter der Mindestbesatzung kostet es Fahrt (Ship.handling). Das ist die
+	# einzige Verschlechterung im Spiel, die man sonst nirgends abliest: Der
+	# Knotenmesser zeigt zu wenig, und das Schiff sieht unbeschaedigt aus.
+	# Deshalb steht der Grund an der Mannschaft und die Folge an der Fahrt.
+	var undermanned := GameState.handling() < 1.0
+	if undermanned:
+		# Die Mindestbesatzung steht nur dann dabei, wenn sie unterschritten ist -
+		# sonst waere sie eine Zahl, die sich nie aendert und nichts erklaert.
+		_condition.text = "Rumpf %d  ·  Segel %d  ·  %d von %d Mann  ·  unterbesetzt" % [
+			GameState.hull, GameState.sails, GameState.crew, GameState.min_crew()
+		]
+	else:
+		_condition.text = "Rumpf %d  ·  Segel %d  ·  %d Mann" % [
+			GameState.hull, GameState.sails, GameState.crew
+		]
 	_paint(_condition, _state_color(worst))
+	_paint(_speed, Palette.BAD if undermanned else Palette.HUD_TEXT)
 
 	_purse.text = "%d Gold" % GameState.gold
 	_hold.text = "Laderaum %d / %d" % [GameState.cargo_used(), GameState.cargo_capacity()]
@@ -231,21 +252,51 @@ func _on_player_struck(lost_gold: int, lost_units: int) -> void:
 		% [lost_gold, lost_units], Palette.BAD)
 
 
+## Prise, Entern und Hafen teilen sich eine Zeile und liegen auf derselben
+## Taste. Deshalb merkt sich das HUD alle drei und baut die Zeile an einer
+## Stelle zusammen - sonst loescht das Signal des einen die Aufforderung des
+## anderen, und die Leertaste tut etwas, das nirgends steht.
+##
+## Die Reihenfolge ist dieselbe wie in SailingMode._unhandled_input. Wer sie
+## hier aendert, aendert sie dort mit.
+func _refresh_prompt() -> void:
+	if not _prize_prompt.is_empty():
+		_dock_prompt.text = _prize_prompt
+	elif not _boarding_prompt.is_empty():
+		_dock_prompt.text = _boarding_prompt
+	else:
+		_dock_prompt.text = _dock_prompt_text
+
+
 func _on_prize_target_changed(ship_name: String) -> void:
-	if ship_name.is_empty():
-		_dock_prompt.text = ""
-		return
-	_dock_prompt.text = "Leertaste   ·   %s aufbringen" % ship_name
+	_prize_prompt = "" if ship_name.is_empty() 		else "Leertaste   ·   %s aufbringen" % ship_name
+	_refresh_prompt()
+
+
+func _on_boarding_target_changed(ship_name: String) -> void:
+	_boarding_prompt = "" if ship_name.is_empty() 		else "Leertaste   ·   %s entern" % ship_name
+	_refresh_prompt()
+
+
+## Was ein Sturm gekostet hat. Beide Zahlen stehen da, auch die eigene: Wer
+## entert, soll die Rechnung sehen und beim naechsten Mal abwaegen koennen.
+func _on_boarding_resolved(
+	ship_name: String, won: bool, own_losses: int, their_losses: int
+) -> void:
+	if won:
+		show_notice("%s geentert!   %d eigene Gefallene, %d gegnerische"
+			% [ship_name, own_losses, their_losses], Palette.GOOD)
+	else:
+		show_notice("Sturm auf %s abgeschlagen:   %d eigene Gefallene, %d gegnerische"
+			% [ship_name, own_losses, their_losses], Palette.BAD)
 
 
 # --- Hafen -----------------------------------------------------------------
 
 func _on_dock_target_changed(town_id: int) -> void:
 	var town := WorldData.get_town(town_id)
-	if town == null:
-		_dock_prompt.text = ""
-		return
-	_dock_prompt.text = "Leertaste   ·   In %s anlegen" % town.town_name
+	_dock_prompt_text = "" if town == null 		else "Leertaste   ·   In %s anlegen" % town.town_name
+	_refresh_prompt()
 
 
 func _on_ran_aground(damage: int) -> void:

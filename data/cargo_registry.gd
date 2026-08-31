@@ -7,15 +7,25 @@
 ##
 ## Rohstoffe wachsen auf den Inseln, Fertigwaren werden in Staedten verarbeitet
 ## oder kommen aus Europa. Die Trennung erzeugt Handelsrouten: Ein Dorf gibt
-## Zucker billig ab und zahlt fuer Werkzeug.
+## Tabak billig ab und zahlt fuer Kanonen.
+##
+## Neun Waren, nicht zwoelf. Zucker, Kaffee und Werkzeug sind bewusst
+## herausgenommen: Zwei Rohstoffe mit aehnlichem Preis unterscheiden sich fuer
+## den Spieler durch nichts als ihren Namen, und eine Marktliste, die man nicht
+## mehr ueberblickt, hilft niemandem. Wer eine Ware ergaenzt, sollte sagen
+## koennen, welche Entscheidung sie neu ermoeglicht.
+##
+## ACHTUNG: Die Zahl der Waren steht der Wirtschaft naeher, als sie aussieht.
+## Wieviel Bedarf eine Stadt hat, haengt am Vorrat, aus dem gezogen wird -
+## Kennzahlen dazu druckt tests/world_report.tscn.
 class_name CargoRegistry
 extends RefCounted
 
 const RAW_IDS: Array[StringName] = [
-	&"wood", &"sugar", &"cotton", &"tobacco", &"cocoa", &"coffee", &"spices",
+	&"wood", &"cotton", &"tobacco", &"cocoa", &"spices",
 ]
 const FINISHED_IDS: Array[StringName] = [
-	&"food", &"rum", &"cloth", &"tools", &"cannons",
+	&"food", &"rum", &"cloth", &"cannons",
 ]
 
 const DIRECTORY: String = "res://resources/cargo/"

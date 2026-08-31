@@ -64,8 +64,8 @@ Farbe zeigt in Listen eine **Richtung**, keinen Wert. Im Markt ist ein niedriger
 grün und ein hoher Verkaufspreis ebenfalls — beides ist ein Vorteil für den Spieler. Die
 Gegenrichtung wird **abgeblendet**, nicht rot.
 
-**Warum:** Zuerst war die Gegenrichtung rot. Bei zwölf Waren standen dann zwölf rote
-Zahlen auf dem Bildschirm, und ein mittelmäßiger Zuckerpreis sah aus wie ein Leck im
+**Warum:** Zuerst war die Gegenrichtung rot. Bei den damals zwölf Waren standen dann zwölf rote
+Zahlen auf dem Bildschirm, und ein mittelmäßiger Tabakpreis sah aus wie ein Leck im
 Rumpf. Rot bedeutet in diesem Spiel Schaden und Gefahr — siehe [A4](#a4-zustandsfarben-sind-kein-akzent).
 
 ### A6. Karte zeigt, was die Welt zeigt
@@ -251,6 +251,23 @@ die Breitseite noch in der Luft steht.
 Was der Code tut, steht im Code. Kommentare begründen Entscheidungen, nennen
 Größenordnungen und warnen vor Fallen. Jede Konstante, deren Wert nicht offensichtlich
 ist, bekommt einen Satz dazu.
+
+### B15. Ein Anzeigefeld hat einen Schreiber
+
+Schreiben mehrere Signale auf dasselbe Feld, baut **eine** Funktion den Inhalt zusammen und
+kennt die Rangfolge. Jedes Signal setzt nur seinen eigenen Anteil.
+
+Der Fehler dazu: Prise, Entern und Anlegen liegen alle auf der Leertaste und teilen sich
+eine Zeile im HUD. Jedes der drei Signale hat die Zeile für sich beschrieben — und beim
+Leerwerden *gelöscht*. Fuhr man an einem Hafen vorbei und geriet dabei ein Gegner aus der
+Enterreichweite, verschwand die Aufforderung zum Anlegen, obwohl der Hafen noch dalag. Die
+Leertaste tat dann etwas, das nirgends stand.
+
+Zwei Schreiber gehen oft lange gut, weil sich ihre Fälle selten überschneiden. Der dritte
+bringt es zum Vorschein. Deshalb ab dem **zweiten** zusammenbauen, nicht ab dem dritten.
+
+Steht die Rangfolge an zwei Stellen — hier `SailingMode._unhandled_input` für die Tat und
+`SailingHud._refresh_prompt` für den Text —, gehört an beide der Hinweis auf die andere.
 
 ### B14. Sprache
 

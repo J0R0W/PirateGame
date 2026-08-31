@@ -6,7 +6,7 @@
 ## darueber, indem es den Bestand verschiebt.
 ##
 ## Bewusst KEINE Buchhaltung mit Waren, die von Stadt zu Stadt wandern. Solche
-## Modelle kippen: Entweder ersaeuft die Karibik in Zucker oder alle Lager sind
+## Modelle kippen: Entweder ersaeuft die Karibik in Tabak oder alle Lager sind
 ## nach zwei Wochen leer, und man verbringt den Rest des Projekts damit,
 ## Zahlen nachzuregeln. Hier laeuft jeder Bestand auf seinen natuerlichen Wert
 ## zu (siehe [method relax]), und der Spieler stoert diesen Zustand.

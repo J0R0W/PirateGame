@@ -8,6 +8,7 @@
 ##   1. Begegnungen - fremde Segel auftauchen und wieder verschwinden lassen
 ##   2. Breitseiten - auswuerfeln, fliegen lassen, Schaden zuteilen
 ##   3. Prisen - was ein besiegter Gegner hergibt
+##   4. Entern - der zweite Weg zur Prise, mit Leuten statt mit Pulver
 class_name NavalCombat
 extends Node3D
 
@@ -85,6 +86,8 @@ var rng := RandomNumberGenerator.new()
 var _spawn_timer: float = FIRST_SPAWN_DELAY
 ## Restliche Waffenruhe nach einer Niederlage, in Sekunden.
 var _truce: float = 0.0
+## Restliche Zeit, bis die Enterhaken wieder klar sind.
+var _grapple_recovery: float = 0.0
 
 
 func setup(player_ship: Ship) -> void:
@@ -98,6 +101,7 @@ func _physics_process(delta: float) -> void:
 	if player == null or not WorldData.generated:
 		return
 	_truce = maxf(_truce - delta, 0.0)
+	_grapple_recovery = maxf(_grapple_recovery - delta, 0.0)
 	_forget_freed_ships()
 	_update_targets()
 	_update_spawning(delta)
@@ -504,6 +508,68 @@ func take_prize(ship: Ship) -> void:
 	ship.gold = 0
 	ship.cargo.clear()
 	_release(ship)
+
+
+# --- Entern ----------------------------------------------------------------
+
+## Der Gegner, den man von hier aus stuermen koennte, oder null.
+##
+## Anders als bei einer Prise geht es hier um ein Schiff, das noch kaempft.
+## Die Sperre nach einem abgeschlagenen Sturm zaehlt mit: Solange die Haken
+## nicht klar sind, liegt zwar jemand laengsseit, aber es geht niemand hinueber.
+func boarding_in_reach() -> Ship:
+	if _grapple_recovery > 0.0 or player == null or player.struck or player.finished:
+		return null
+	for ship: Ship in _ships:
+		if Boarding.can_board(
+			_range_to_player(ship), player.crew, ship.struck, ship.finished
+		):
+			return ship
+	return null
+
+
+## Wie lange die Enterhaken noch unklar sind, in Sekunden. Fuer die Anzeige.
+func grapple_recovery() -> float:
+	return _grapple_recovery
+
+
+## Setzt ueber und ficht das Deckgefecht aus.
+##
+## Der Sieg bringt keine Beute, sondern die gestrichene Flagge: Ausgeraeumt
+## wird danach mit [method take_prize], genau wie bei einem Gegner, den man
+## zusammengeschossen hat. Das haelt die beiden Wege getrennt - der eine kostet
+## Zeit und Pulver, der andere Leute - und den Ertrag gleich.
+func board(ship: Ship) -> Boarding.Result:
+	if ship == null or player == null:
+		return null
+	if not Boarding.can_board(
+		_range_to_player(ship), player.crew, ship.struck, ship.finished
+	):
+		return null
+
+	var outcome := Boarding.resolve(
+		rng,
+		player.crew,
+		float(GameState.notoriety) / 100.0,
+		ship.crew,
+		ship.hull_fraction()
+	)
+
+	# Verluste als Treffer in die Mannschaft: So laufen sie durch dieselben
+	# Signale wie Kartaetschen, und GameState wird auf dem gewohnten Weg
+	# fortgeschrieben (Ship.condition_changed).
+	player.take_hit(Gunnery.Zone.CREW, outcome.attacker_losses)
+	ship.take_hit(Gunnery.Zone.CREW, outcome.defender_losses)
+
+	_grapple_recovery = Boarding.RECOVERY_SECONDS
+	if outcome.won:
+		ship.strike()
+		EventBus.ship_boarded.emit(ship)
+
+	EventBus.boarding_resolved.emit(
+		ship.ship_name, outcome.won, outcome.attacker_losses, outcome.defender_losses
+	)
+	return outcome
 
 
 ## Das ausgeraeumte Schiff treibt davon. Es zu behalten kommt mit M5.
