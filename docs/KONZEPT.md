@@ -152,8 +152,7 @@ Hafenpanorama im Hintergrund, davor Gebäude als anklickbare Orte.
 |---|---|
 | **Markt** | Waren kaufen/verkaufen, Preise abhängig von lokalem Angebot/Nachfrage |
 | **Werft** | Reparatur, Umbau (Kanonen, Laderaum, Segel), Schiffskauf/-verkauf |
-| **Werft (vorläufig)** | Auch Anheuern — gehört in die Taverne, steht aber schon hier, weil ein Gefecht seit M4 Leute kostet |
-| **Taverne** | Crew anheuern, Gerüchte hören, Offiziere rekrutieren |
+| **Schenke** | Crew anheuern, Gerüchte hören — seit M6 gebaut (7.14). Offiziere fehlen noch: sie sind Charaktere mit Moral (5.1), und die gibt es erst mit Tier 1 |
 | **Gouverneurspalast** | Aufträge der Nation, Kaperbriefe, Beförderungen, Landbesitz |
 | **Hehler** *(nur bei schlechtem Ruf)* | Beute ohne Fragen verkaufen, schlechterer Kurs |
 
@@ -278,6 +277,11 @@ Zwei getrennte Achsen statt einer: **Ansehen bei jeder Nation** (−100 bis +100
 (0–100, wächst mit jeder Tat, sinkt nie). Berüchtigt beeinflusst: Kapitulationsbereitschaft von
 Gegnern, Crew-Rekrutierung, Warenpreise, und ab Schwellenwerten schicken Nationen **Kopfgeldjäger**
 — benannte Kapitäne mit starken Schiffen, die dich aktiv suchen.
+
+> **Stand nach M6:** Drei der vier sind gebaut — Kapitulation (7.8), Kopfgeldjäger (7.12) und
+> seit der Schenke auch das Handgeld: Zu einem berüchtigten Kapitän kommen die Leute
+> billiger (7.14). Das ist Absicht und nicht Nachlässigkeit: Eine Achse, die nur kostet,
+> ist so wenig eine Entscheidung wie eine, die nur hilft. Warenpreise fehlen noch.
 
 ### 5.4 Flottenführung
 Erbeutete Schiffe kannst du behalten. Ab Schiff Nr. 2 brauchst du einen Kapitän aus deinen
@@ -653,6 +657,205 @@ erarbeitet haben. Genau diese Abwägung soll die Mechanik tragen.
 Nach einem Sturm sind die Enterhaken 25 Sekunden unklar (`RECOVERY_SECONDS`). Ohne diese
 Sperre wäre ein abgeschlagener Sturm nur ein zweiter Tastendruck.
 
+### 7.10 Der Ruf — und wer daraufhin schießt
+
+Bis M6 war das Ansehen eine Zahl, die niemand las. `GameState.reputation` führte für jede
+Nation einen Wert von −100 bis +100, Prisen veränderten ihn — und **kein einziger Codepfad
+fragte ihn ab.** Jede Patrouille griff jeden an; eine frisch begonnene Kampagne wurde vom
+ersten spanischen Segel beschossen, ohne dass Spanien einen Grund gehabt hätte. Genauso
+standen `NationData.aggression` und `reputation_sensitivity` seit M2 ungenutzt in allen vier
+`.tres`-Dateien.
+
+`Standing` (nodefrei, Regel B3) übersetzt die Zahl in fünf Stufen und beantwortet damit drei
+Fragen:
+
+| | |
+|---|---|
+| **Steht der Hafen offen?** | Erst bei *feindlich* macht er zu — nicht schon beim Misstrauen |
+| **Jagt eine Patrouille?** | Feindlich: immer. Misstrauisch: nur, wenn die Nation schnell zur Sache kommt |
+| **Wie schwer wiegt eine Tat?** | Spanien (1,2) nimmt dieselbe Prise schwerer als die Niederlande (0,8) |
+
+**Warum der Hafen erst ganz unten zumacht:** Bei *misstrauisch* wäre der Spieler nach zwei
+Prisen aus dem halben Spiel heraus, ohne je gemerkt zu haben, dass es eine Skala gibt. Die
+Stufe dazwischen ist die Warnung — Design-Pillar „Konsequenz statt Bestrafung".
+
+**Ein Kapitän braucht einen Grund.** `ShipAI.wants_battle()` ist `hostile or provoked`, und
+daran hängen *beide* Entscheidungen: der Gefechtskurs und das Feuer. Solange die getrennt
+gerechnet wurden, floh ein provozierter Kapitän und schoss dabei — er lief davon und feuerte
+nach hinten. Ein Handelsschiff jagt nie, auch wenn seine Krone den Spieler sucht; es flieht
+und wehrt sich nur.
+
+**Sichtbar an drei Stellen** (Regel A8): am Ziel im HUD steht das Verhältnis neben der
+Entfernung, die Anlegeaufforderung wird zur Absage („*Bahía Salada ist dir verschlossen*"),
+und die Seekarte zeigt alle vier Nationen nebeneinander. Der letzte Ort ist der wichtigste:
+Auf See sieht man immer nur das eine Segel, das gerade da ist.
+
+### 7.11 Der Kaperbrief — die Gegenrichtung
+
+Nach 7.10 hatte der Ruf Folgen, aber nur nach unten. Jede Prise kostete Ansehen bei der
+bestohlenen Krone, und **nichts brachte je welches ein** — die Skala war ein Verfall, kein
+Werkzeug. Wer lange genug spielt, steht damit irgendwann bei allen vier Nationen unten und
+hat keinen Hafen mehr.
+
+Der Kaperbrief dreht das um. Er ist ein Auftrag: Wer ihn trägt, dem schreibt seine Krone
+jede Prise gegen eine *andere* Krone gut (`LetterOfMarque.PRIZE_REWARD`, +5). Aus dem
+Verfall wird eine Entscheidung — man arbeitet sich bei einer Nation hoch, während man bei
+den übrigen fällt.
+
+| | |
+|---|---|
+| **Wer stellt aus?** | Ein Gouverneur, ab *gleichgültig* — nicht erst ab *wohlgesonnen*, sonst wäre der Brief ein Preis dafür, das System schon zu kennen |
+| **Wo?** | In einer Stadt oder Hauptstadt. Ein Dorf hat keinen Gouverneur — der erste Grund im Spiel, eine größere Stadt anzulaufen, der nichts mit Preisen zu tun hat |
+| **Was kostet er?** | Kein Gold, sondern Ansehen: −5 bei jeder der übrigen drei Kronen. Der Preis steht am Anfang, nicht am Ende |
+| **Wie viele?** | Genau einer. Vier Briefe wären vier Freunde und keine Wahl |
+
+**Der Seitenwechsel braucht keine eigene Regel.** Nimmt man einen zweiten Brief an, ist der
+bisherige Patron ab diesem Moment eine der übrigen Kronen und bucht denselben Verlust wie
+sie. Ein Wechsel kostet damit von selbst mehr als der erste Brief.
+
+**Zurückgeben ist frei, Verrat nicht.** Einen Auftrag niederzulegen schadet niemandem und
+kostet deshalb nichts — was die anderen sich notiert haben, bleibt trotzdem stehen. Wer
+dagegen das Schiff des eigenen Auftraggebers aufbringt, verliert den Brief auf der Stelle
+und zahlt obendrauf (`BETRAYAL_COST`, −12).
+
+**Unterm Strich bleibt Kapern ein Verlust an Ansehen.** Der Patron schreibt +5 gut, der
+Bestohlene bucht −8 ab; der Brief verschiebt nur, *wo* der Verlust anfällt. Ohne dieses
+Gefälle wäre er ein Freibrief statt einer Entscheidung — der Rauchtest hält das Verhältnis
+der beiden Zahlen fest, damit es nicht beim Balancing verlorengeht.
+
+Der Ort dafür ist der **Gouverneurspalast**, der dritte Hafenbildschirm neben Markt und
+Werft und der erste, in dem es nicht um Gold geht. Er steht auch in einem Dorf im Menü und
+sagt dort, dass hier keiner sitzt — ein Menüpunkt, der mal da ist und mal nicht, erklärt
+nichts (Regel A8). Daneben ist der Brief in der **Legende der Seekarte** vermerkt und in
+der **Prisenmeldung** auf See („… · England schreibt sie gut").
+
+### 7.12 Der Auftrag und das Kopfgeld — benannte Gegner
+
+Der Kaperbrief zählte seine Prisen mit (`GameState.letter_prizes`), und **die Zahl hing an
+nichts.** Er war die Erlaubnis zu kapern, aber kein Grund, irgendwo hinzufahren. Und die
+zweite Ansehensachse hatte dasselbe Problem von der anderen Seite: Berüchtigtheit wächst
+seit M4 mit jeder Prise und sinkt nie, tat aber nur eines — Gegner strichen früher die
+Flagge (`Gunnery.will_strike`). Ein Ruf, der ausschließlich hilft, ist kein Preis.
+
+Beides hängt jetzt an derselben Maschinerie: einem **benannten Gegner** (`Adversary`) — ein
+Kapitän mit Namen auf einem bestimmten Schiff, der absichtlich gesetzt wird statt aus dem
+Zufall gespült. Der Unterschied ist nur, wer ihn benannt hat.
+
+**Der Auftrag** (`Commission`) kommt vom Gouverneur der eigenen Patronskrone; ohne
+Kaperbrief gibt es keinen. Er ist die erste Schleife im Spiel, die **nicht auf See endet**:
+
+| | |
+|---|---|
+| **Was?** | Ein Steckbrief: Kapitän, Schiff, Flagge. Aufbringen *oder* versenken — der Gouverneur will ihn nur von der See haben |
+| **Wie lange?** | Acht Spieltage (`Commission.DAYS`), rund eine halbe Stunde Echtzeit |
+| **Was bringt er?** | Gold, das mit jedem eingelösten Auftrag steigt (400 → 2400), und **+10 Ansehen** beim Patron |
+| **Was kostet ein Fehlschlag?** | −4 beim Patron. Ohne das wäre die Annahme ein Knopf ohne Gegenseite |
+| **Wo wird gezahlt?** | In einer Stadt der eigenen Krone, beim Gouverneur. Die See zahlt sofort, der Auftraggeber erst, wenn man wieder vor ihm steht |
+
+**Der Auftrag ist die einzige Tat, bei der das Ansehen in der Welt unterm Strich steigt.**
+Wer nur unter dem Brief plündert, verschiebt seinen Ruf von einer Krone zur anderen und
+verliert dabei (+5 gegen −8, siehe 7.11). Wer tut, was ihm aufgetragen wurde, steigt
+wirklich auf (+10 plus die +5 der gedeckten Prise gegen −8 beim Bestohlenen) — und fährt
+dafür gegen ein Kriegsschiff statt gegen einen Frachter. Ab dem dritten Auftrag ist das
+Ziel eine **Fregatte** (`resources/ships/frigate.tres`, vierzehn Rohre), und genau dort
+fehlt der Schiffskauf aus M5 am deutlichsten. Ihr `hull_scale` steht auf 2,2 und nicht auf
+den zuerst gesetzten 1,7: Gegen die Handelsbrigg (1,4) war sie auf Gefechtsentfernung nicht
+zu unterscheiden, und eine Klasse, die man nicht erkennt, ist keine (Regel A1). Der größere
+Rumpf ist zugleich ein größeres Ziel — das ist die Gegenseite zu ihren sieben Rohren je
+Breitseite, kein Versehen.
+
+**Der Steckbrief wird gerechnet, nicht gehalten.** Der Würfel hängt an Seed, Krone und der
+Zahl der *eingelösten* Aufträge. Damit steht bei jedem Blick in den Palast derselbe Mann da,
+ohne dass ein Angebot gespeichert werden müsste — und wer einen Auftrag verstreichen lässt,
+bekommt denselben Mann noch einmal ausgeschrieben: Ein Gesuchter bleibt gesucht, bis ihn
+jemand bringt.
+
+**Der Brief trägt den Auftrag.** Wer den Kaperbrief zurückgibt oder die Seite wechselt,
+lässt einen offenen Auftrag liegen und bekommt ihn angerechnet — sonst wäre die Rückgabe
+der Schlupfweg aus jeder Frist. Beim Einzug nach Verrat entfällt die zweite Rechnung: Der
+ist mit `BETRAYAL_COST` schon bezahlt.
+
+**Das Kopfgeld** (`Bounty`) ist dieselbe Mechanik, nur zeigt der Steckbrief auf den Spieler.
+Zwei Achsen, wie in 5.3 vorgesehen: Die Berüchtigtheit entscheidet, *ob* jemand ausfährt (ab
+35, rund zehn Prisen), das Verhältnis, *wer* ihn schickt — und zwar nur eine **feindliche**
+Krone. Bei *misstrauisch* schickt eine aggressive Nation schon ihre Patrouillen; ein Kopfgeld
+ist der Schritt danach, von „wir greifen dich an, wenn wir dich sehen" zu „wir suchen dich".
+Ab 65 kommt er auf einer Fregatte. Sein Vorschuss ist das eigene Kopfgeld: Wer teuer
+ausgeschrieben ist, bekommt einen teuer bezahlten Jäger — und damit **die beste Prise auf
+See ausgerechnet von dem Mann, den er am wenigsten treffen will.** Nach einem erledigten
+Jäger sind vier Minuten Ruhe, sonst käme ein berüchtigter Kapitän nie mehr zum Handeln.
+
+**Sichtbar an drei Stellen** (Regel A8): der Steckbrief im **Gouverneurspalast** mit Frist
+und Lohn, der Name im **HUD** — benannte Kapitäne sind die Einzigen auf See, die mit Namen
+in der Zielzeile stehen, und die Sichtungsmeldung trennt Gelegenheit (messing) von Warnung
+(rot) —, und eine Zeile über der **Seekarte**, die die Frist herunterzählt. Die Karte ist
+der richtige Ort dafür: Auf See ist jede Zeile für das da, was im nächsten Augenblick
+passiert; ein Auftrag läuft über Tage.
+
+### 7.13 Die Kronen unter sich — Krieg und Frieden
+
+Der Kaperbrief deckte alles außer der eigenen Flagge, und welche Krone ein Auftrag traf,
+entschied der Würfel. An beiden Stellen stand ein Kommentar, dass hier eigentlich der Krieg
+entscheiden müsste. `Diplomacy` ist dieser Krieg.
+
+**Zu jeder Zeit liegt jede Krone mit genau einer anderen im Krieg.** Vier Nationen lassen
+sich auf genau drei Arten so paaren; die Lage ist immer eine dieser drei. Enger als „jeder
+gegen jeden nach Würfel", und zwar an beiden Enden — ein allgemeiner Friede schaltete
+Kaperbrief und Auftrag ab, ein allgemeiner Krieg wäre der Zustand von vorher. Die Paarung
+ist die interessante Mitte: **Der Brief deckt genau eine Flagge, und welche das ist, sucht
+man sich mit dem Patron aus.**
+
+Die Lage ist eine **reine Funktion aus Weltseed und Spieltag** — gerechnet, nicht gehalten,
+wie der Steckbrief in 7.12. Damit steht sie in keinem Spielstand und kann mit keinem
+auseinanderlaufen. Alle 24 Spieltage (dreimal die Frist eines Auftrags) wird neu verhandelt,
+und dann wirklich: Der Schritt durch die drei Lagen ist immer eins oder zwei, nie null, und
+jede Krone bekommt dabei einen anderen Feind.
+
+**Ein laufender Auftrag überlebt den Friedensschluss.** Der Gouverneur hat den Mann
+ausgeschrieben, und ein Steckbrief wird nicht dadurch gegenstandslos, dass die Kronen sich
+vertragen. Ihn zu annullieren wäre die naheliegende Alternative gewesen — dann verlöre aber
+etwa jeder dritte Auftrag durch einen Würfel, den der Spieler nicht sieht und gegen den er
+nichts tun kann.
+
+**Nicht gebaut:** Dass Kriegsparteien einander auf See angreifen. Die Schiffs-KI kennt genau
+einen Gegner, den Spieler; eine Seeschlacht mit drei Parteien ist ein eigener Brocken und
+steht in Abschnitt 6 nicht ohne Grund als **Tier 2** („Nationen-Kriege mit dynamischen
+Frontverläufen").
+
+### 7.14 Die Schenke — wo man erfährt, wohin
+
+Der vierte Hafenbildschirm. Zwei Dinge stehen dort.
+
+**Anheuern**, aus der Werft hierher gezogen — der Kommentar dort sagte seit M4 selbst, dass
+es nicht dorthin gehört. Die Rechnung ist dieselbe geblieben und hat einen zweiten Grund
+bekommen: Berüchtigtheit senkt das Handgeld um bis zu ein Drittel. Wer Prisen macht, hat
+Zulauf.
+
+**Das Gerede**, und das ist der eigentliche Grund für den Bildschirm. Ein Auftragsziel wurde
+bis hierher einfach in Sichtweite gesetzt, egal wo man fuhr — man konnte einen Auftrag nicht
+*suchen*, nur abwarten. Jetzt bekommt der Gesuchte bei der Annahme ein **Revier**: den Hafen
+seiner eigenen Flagge, der dem Ort der Zusage am nächsten liegt. Innerhalb von 3000 Metern
+davon läuft er aus, sonst nicht.
+
+| Gerücht | Wann |
+|---|---|
+| Politik | immer — wer mit wem Krieg führt, und was der eigene Brief deshalb deckt |
+| Der Gesuchte | mit laufendem Auftrag: vor welchem Hafen er kreuzt |
+| Der Jäger | wenn eine feindliche Krone ein Kopfgeld ausgesetzt hat |
+| Handel | welche Ware von hier in einem Nachbarhafen gut bezahlt wird |
+| Über dich | ab 15 Punkten Berüchtigtheit |
+
+**Das Revier steht nicht auf dem Steckbrief.** Der Palast sagt, *wer* gesucht wird, und
+verweist auf die Schenke; der Wirt sagt, *wo*. Erst danach steht der Ort auf der Seekarte.
+Ohne diese Trennung wäre die Schenke ein Bildschirm, den niemand je öffnen müsste — und der
+Auftrag bliebe, was er war: Abwarten statt Suchen.
+
+**Offiziere fehlen** (5.1). Sie sind in diesem Entwurf Charaktere mit eigener Loyalität, die
+im Enter-Gefecht eigene Einheiten führen und sterben können — und beides, Moral wie
+taktisches Deckgefecht, gibt es noch nicht. Ein Offizier ohne das wäre ein Zahlenaufschlag
+mit Namen, also genau das, was 5.1 ausschließt. Er gehört zu Tier 1, zusammen mit dem, was
+ihn trägt.
+
 ### 7.9 Ordnerstruktur
 
 ```
@@ -684,6 +887,17 @@ PirateGame/
 │   │   ├── gunnery.gd          Ballistik, ohne Nodes
 │   │   ├── naval_combat.gd     Begegnungen, Breitseiten, Prisen
 │   │   └── cannon_ball.gd      Kugeln, Rauch, Fontänen
+│   ├── politics/
+│   │   ├── standing.gd         Was eine Nation vom Spieler hält
+│   │   ├── diplomacy.gd        Wer mit wem Krieg führt
+│   │   ├── letter_of_marque.gd Der Kaperbrief
+│   │   ├── adversary.gd        Ein benannter Kapitän auf einem bestimmten Schiff
+│   │   ├── commission.gd       Der Auftrag des Gouverneurs
+│   │   └── bounty.gd           Das Kopfgeld — dieselbe Mechanik von der anderen Seite
+│   ├── economy/
+│   │   ├── trade.gd            Kaufen und Verkaufen
+│   │   ├── shipyard.gd         Rumpf und Segel gegen Gold
+│   │   └── tavern.gd           Handgeld und Gerede
 │   └── ocean/
 │       ├── ocean.tscn
 │       └── ocean.gdshader
@@ -754,8 +968,18 @@ einer Prise. Solange keiner von beiden geht, gibt es keinen Aufstieg, und die
 Abnahmebedingung ist nicht erfüllt.
 > **Fertig, wenn:** Ein kompletter Aufstieg vom Startschiff zu einem größeren Schiff spielbar ist.
 
-### M6 — Welt reagiert *(4 Wochen)*
+### M6 — Welt reagiert *(4 Wochen)*  ← läuft
 Ruf, Kaperbriefe, Nationen-Beziehungen, Gouverneurs-Aufträge, Kopfgeldjäger, Taverne.
+**Der Ruf hat Folgen bekommen** (Abschnitt 7.10): Wer eine Nation ausplündert, wird von
+ihren Patrouillen gejagt und aus ihren Häfen ausgesperrt. **Und er hat eine Gegenrichtung
+bekommen** (Abschnitt 7.11): Der Gouverneurspalast vergibt Kaperbriefe, unter denen eine
+Prise beim Auftraggeber gutgeschrieben wird. **Und daraus ist ein Grund geworden, irgendwo
+hinzufahren** (Abschnitt 7.12): Der Gouverneur schreibt benannte Kapitäne aus, und wer sich
+genug Feinde macht, wird selbst ausgeschrieben. **Und die Kronen haben ein Verhältnis
+zueinander bekommen** (Abschnitt 7.13): Jede liegt mit genau einer anderen im Krieg, und der
+Kaperbrief deckt genau diese eine Flagge. **Die Schenke steht** (7.14) — Anheuern und
+Gerüchte, darunter das Revier des Gesuchten. Offen: Offiziere, die zu Tier 1 gehören und
+Crew-Moral voraussetzen (5.1).
 > **Fertig, wenn:** Deine Taten spürbare Folgen in der Welt haben.
 
 ### M7+ — Signature Features & Politur
@@ -931,6 +1155,52 @@ als ihn zusammenzuschießen, aber es kostet Leute, die danach an Schoten und Roh
 Verteidigen ist im Vorteil, also lohnt eine Breitseite vorher; Berüchtigtheit hilft an Deck,
 also zahlt sich ein Ruf zum ersten Mal aus.
 
+**M6 hat angefangen: Der Ruf bekam Folgen.** Bis dahin war Ansehen eine Zahl, die niemand
+las — jede Patrouille griff jeden an, jeder Hafen stand jedem offen, und `aggression` wie
+`reputation_sensitivity` standen seit M2 ungenutzt in den Nationsdateien. Jetzt jagt nur,
+wer einen Grund hat, und ein feindlicher Hafen bleibt zu. Beschrieben in Abschnitt 7.10.
+
+Dabei fiel ein Fehler auf, der erst durch die Änderung entstehen konnte: Der Gefechtskurs
+hing an `hostile`, das Feuer an `hostile or provoked`. Ein provozierter Kapitän floh damit
+und schoss gleichzeitig — er lief davon und feuerte nach hinten. Beide fragen jetzt
+`wants_battle()`. Aufgefallen ist es daran, dass die Abnahmebedingung von M4 plötzlich 165
+statt 30 Sekunden brauchte: Der manövrierende Testkapitän ist provoziert, nicht feindlich.
+
+**Und der Ruf hat eine Gegenrichtung bekommen: den Kaperbrief** (Abschnitt 7.11). Bis dahin
+konnte Ansehen nur fallen — jede Prise kostete welches, nichts brachte je welches ein. Wer
+lange genug spielte, stand bei allen vier Kronen unten und hatte keinen Hafen mehr. Der
+Brief macht daraus eine Entscheidung: Eine Krone schreibt einem jede Prise gegen eine andere
+gut, und die übrigen drei erfahren beim Ausstellen davon. Es gibt immer nur einen, und wer
+den eigenen Auftraggeber aufbringt, ist ihn los.
+
+Dafür bekam der Hafen seinen dritten Bildschirm, den **Gouverneurspalast** — den ersten, in
+dem es nicht um Gold geht. Er sitzt in einer Stadt oder Hauptstadt, nicht im Dorf: der
+erste Grund im Spiel, eine größere Siedlung anzulaufen, der nichts mit Preisen zu tun hat.
+`TownData.size_tier` war bis dahin eine Zahl, die nur den Werftpreis und die Warenauswahl
+verschob.
+
+**Dann bekam der Brief etwas, woran er hängt: Aufträge und Kopfgeldjäger** (Abschnitt 7.12).
+Er zählte seine Prisen mit, und die Zahl hing an nichts — die Erlaubnis zu kapern war da,
+aber kein Grund, irgendwo hinzufahren. Jetzt hängt der Gouverneur einen Steckbrief aus:
+Kapitän, Schiff, Flagge, acht Tage Frist. Bezahlt wird **an Land** — das ist die erste
+Schleife im Spiel, die nicht auf See endet, und der erste Anlass, in einen bestimmten Hafen
+zurückzufahren statt in den nächstbesten.
+
+Es ist außerdem die einzige Tat, bei der das Ansehen in der Welt unterm Strich *steigt*
+(+10 beim Patron gegen −8 beim Bestohlenen). Bloßes Kapern unter dem Brief bleibt ein
+Verlust (+5 gegen −8); der Unterschied ist genau der zwischen „geduldet" und „beauftragt".
+
+Von derselben Maschinerie lebt die Gegenseite. Berüchtigtheit wuchs seit M4 mit jeder Prise
+und sank nie, tat aber nur eines: Gegner strichen früher die Flagge. Ein Ruf, der
+ausschließlich hilft, ist kein Preis. Ab 35 Punkten schickt eine **feindliche** Krone einen
+benannten Jäger, ab 65 auf einer Fregatte — der neuen und bislang schwersten Klasse. Sein
+Vorschuss ist das eigene Kopfgeld, womit der Mann, den man am wenigsten treffen will,
+zugleich die beste Prise auf See ist.
+
+Beides ist derselbe `Adversary`: ein Kapitän mit Namen auf einem bestimmten Schiff,
+absichtlich gesetzt statt aus dem Zufall gespült. Der Unterschied ist nur, wer ihn benannt
+hat — und ob er den Spieler sucht.
+
 **Von zwölf Waren auf neun.** Zucker, Kaffee und Werkzeug sind heraus: Zwei Rohstoffe mit
 ähnlichem Preis unterscheiden sich für den Spieler durch nichts als ihren Namen, und eine
 Marktliste, die man nicht mehr überblickt, hilft niemandem.
@@ -960,6 +1230,30 @@ nennt die Zustandszeile den Grund („3 von 8 Mann · unterbesetzt") und färbt 
 die Werft schreibt dasselbe dazu. Die Formel steht dafür in `SailingMath`, nicht mehr im
 `Ship` — HUD und Hafen brauchen sie, wenn gar kein Schiff in der Szene hängt.
 
+**M6, vierter Schritt: die Kronen unter sich, und eine Schenke.** Der Kaperbrief deckte
+alles außer der eigenen Flagge — ein Freibrief, keine Entscheidung. `Diplomacy` gibt den
+vier Kronen ein Verhältnis zueinander: Jede liegt mit genau einer anderen im Krieg, und die
+Paarung wird alle 24 Spieltage neu verhandelt. Der Brief deckt seitdem **genau eine
+Flagge**, und wer den Gouverneur wechselt, wechselt sein Jagdrevier mit. Der Zustand steht
+in keinem Spielstand: Er ist eine reine Funktion aus Weltseed und Spieltag, wie der
+Steckbrief in 7.12.
+
+Nicht gebaut wurde, dass Kriegsparteien einander auf See angreifen. Die Schiffs-KI kennt
+genau einen Gegner, den Spieler; das ist ein eigener Brocken und steht in Abschnitt 6 nicht
+ohne Grund als Tier 2.
+
+Dazu die **Schenke** als vierter Hafenbildschirm. Anheuern ist aus der Werft hierher
+gezogen, wo der Kommentar seit M4 selbst sagte, dass es nicht dorthin gehört — und hat
+einen zweiten Grund bekommen: Berüchtigtheit senkt das Handgeld. Damit tut diese Achse zum
+ersten Mal etwas *für* den Spieler.
+
+Der eigentliche Ertrag ist aber das Gerede. **Ein Auftragsziel wurde bis hierher einfach in
+Sichtweite gesetzt, egal wo man fuhr** — man konnte einen Auftrag nicht suchen, nur
+abwarten. Jetzt kreuzt der Gesuchte vor einem bestimmten Hafen, der Palast sagt nur *wer*,
+und der Wirt sagt *wo*. Erst danach steht der Ort auf der Seekarte. Aus dem Abwarten ist
+eine Fahrt mit Ziel geworden, und `Commission.DAYS` = 8 hat zum ersten Mal etwas zu
+befristen.
+
 ---
 
 ## 11. Nächste Schritte
@@ -980,8 +1274,28 @@ die Werft schreibt dasselbe dazu. Die Formel steht dafür in `SailingMath`, nich
    wächst), `NavalCombat.spawn_interval` (wie oft überhaupt jemand kommt). Fürs Entern:
    `Boarding.DEFENCE_BONUS` (wie sehr Verteidigen im Vorteil ist), `Boarding.LOSS_RATE`
    (was ein Sturm kostet), `Boarding.FEAR_BONUS` (was der Ruf an Deck wert ist).
-3. **`godot --path . res://tests/capture_battle.tscn`** rendert ein Gefecht in fünf
-   Aufnahmen — schneller als eines zu suchen, wenn es nur um die Darstellung geht.
+3. **`godot --path . res://tests/capture_battle.tscn`** rendert ein Gefecht in seinen
+   Schritten — schneller als eines zu suchen, wenn es nur um die Darstellung geht.
+4. **Einen Kaperbrief holen und damit fahren.** Im Hafen unter „Gouverneur", und nur in
+   einer Stadt oder Hauptstadt — ein Dorf hat keinen. Danach zeigt die Seekarte (M), wie
+   die vier Kronen mit jeder Prise auseinanderlaufen. Das ist der schnellste Weg zu einem
+   Urteil darüber, ob `LetterOfMarque.PRIZE_REWARD` und `RIVAL_COST` sich richtig anfühlen.
+5. **Und dann einen Auftrag annehmen — und in die Schenke gehen.** Der Palast sagt, wer
+   gesucht wird; der Wirt nebenan sagt, vor welchem Hafen er kreuzt. Danach steht der Ort
+   auf der Seekarte (M), und dort läuft auch die Frist. Die offene Frage daran ist nicht
+   der Lohn, sondern ob `Commission.DAYS` = 8 (rund eine halbe Stunde Echtzeit) für die
+   Überfahrt reicht — das hängt an `Commission.WATERS_RANGE` (3000 m) und daran, wie weit
+   der nächste Hafen der gesuchten Flagge liegt. Wer es eilig hat, dreht im Debug-Menü (F3)
+   am Abstand der Begegnungen.
+6. **Berüchtigt werden.** Ab 35 Punkten (rund zehn Prisen) und einer feindlichen Krone kommt
+   ein benannter Jäger; in der Schenke wird vorher davor gewarnt. Berüchtigtheit hat jetzt
+   beide Richtungen — sie schickt Jäger und senkt das Handgeld —, aber beide Zahlen dafür
+   (`Bounty.HUNTED_FROM`, `Tavern.FAME_DISCOUNT`) sind geraten, nicht gemessen.
+7. **Lange genug spielen, dass die Kronen neu verhandeln.** Alle 24 Spieltage, also rund
+   anderthalb Stunden. Das HUD meldet es, die Zeile über der Seekarte zeigt die neue Lage,
+   und der Palast schreibt, was der eigene Brief jetzt deckt. `Diplomacy.ERA_DAYS` ist aus
+   `Commission.DAYS` abgeleitet (dreimal die Frist) und nicht gespielt — wenn sich das zu
+   selten anfühlt, ist es die Zahl, an der man dreht.
 
 **Stand M5:** Das Entern ist gebaut, als Wurf-Auflösung wie in Abschnitt 6 (Tier 0)
 vorgesehen — das taktische Deckgefecht aus 3.4 ist Tier 1 und braucht Offiziere, die es
@@ -991,10 +1305,13 @@ zu haben ist, gibt es keinen Aufstieg, und M5 ist nicht abgeschlossen.
 
 Offen aus M4, bewusst zurückgestellt:
 
-- Der Ruf hat noch keine Folge. Prisen kosten Ansehen und bringen Berüchtigtheit, und
-  Berüchtigtheit wirkt inzwischen an zwei Stellen — sie macht Gegner mürber
-  (`Gunnery.will_strike`) und die eigene Mannschaft an Deck stärker (`Boarding.FEAR_BONUS`).
-  Aber niemand *reagiert* darauf. Das ist M6.
+- ~~Der Ruf hat noch keine Folge.~~ **Erledigt in M6** (Abschnitte 7.10 und 7.11): Patrouillen
+  jagen nach Ansehen, feindliche Häfen bleiben zu, und der Kaperbrief ist die Gegenrichtung.
+  Berüchtigtheit wirkt daneben weiter an zwei Stellen — sie macht Gegner mürber
+  (`Gunnery.will_strike`) und die eigene Mannschaft an Deck stärker (`Boarding.FEAR_BONUS`) —
+  und seit 7.12 schickt sie einem ab 35 Punkten benannte Kopfgeldjäger auf den Hals, womit
+  sie zum ersten Mal auch etwas kostet. Offen bleibt, dass sie nur *steigt*: Es gibt keinen
+  Weg, sie loszuwerden.
 - Ein verlorenes Gefecht nimmt Gold und Ladung und setzt den Rumpf auf ein Viertel. Das
   bleibt ein Platzhalter, bis die Entscheidung über Schiff und Mannschaft dazugehört.
 - **Eine erbeutete Prise lässt sich noch nicht behalten.** Sie wird ausgeräumt und treibt

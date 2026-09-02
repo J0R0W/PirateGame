@@ -297,6 +297,21 @@ Umlaute in Code-Kommentaren wurden bewusst vermieden, damit Encoding-Fragen in E
 und Werkzeugen gar nicht erst aufkommen. In Markdown und UI-Strings gibt es diese Sorge
 nicht.
 
+**Zusammengesetzte UI-Sätze gehen über das Adjektiv, nicht über den Namen.** Drei der vier
+Kronen sind Eigennamen ohne Artikel, die vierte ist ein Plural mit einem — ein Satz mit
+`display_name` darin steht bei drei Nationen richtig da und bei der vierten falsch:
+„Niederlande liegt im Krieg", „die Niederlande hat ein Kopfgeld ausgesetzt". Beides stand
+im Bild, bevor es jemand gemerkt hat.
+
+- `NationData.adjective` deckt fast alles ab, weil es dekliniert wird wie jedes andere
+  Adjektiv: „ein**e** niederländisch**e** Fregatte", „gegen englisch**e** Segel",
+  „dein spanisch**er** Kaperbrief".
+- `NationData.subject_name()` liefert den Nominativ mit Artikel („die Niederlande") — und
+  weil der bei allen vieren zugleich der Akkusativ ist, funktioniert auch „gegen die
+  Niederlande".
+- Für alles andere — Dativ, Genitiv, ein Verb, das sich nach dem Numerus richtet — wird der
+  Satz umgebaut, nicht das Datenmodell erweitert.
+
 Godot-Konventionen im Übrigen: `snake_case` für Variablen und Funktionen, `PascalCase`
 für Klassen, `SCREAMING_CASE` für Konstanten, führender Unterstrich für Privates,
 `##` für Dokumentationskommentare.

@@ -9,6 +9,7 @@
 ##   2. Breitseiten - auswuerfeln, fliegen lassen, Schaden zuteilen
 ##   3. Prisen - was ein besiegter Gegner hergibt
 ##   4. Entern - der zweite Weg zur Prise, mit Leuten statt mit Pulver
+##   5. Benannte Gegner - wer nicht aus dem Zufall kommt, sondern aus der Politik
 class_name NavalCombat
 extends Node3D
 
@@ -43,7 +44,10 @@ const PRIZE_RANGE: float = 110.0
 ## [method Gunnery.will_strike].
 const PRIZE_NOTORIETY: int = 3
 ## Ansehensverlust bei der bestohlenen Nation.
-## TODO(M6): Bis dahin hat der Ruf noch keine sichtbare Folge.
+##
+## Groesser als das, was ein Kaperbrief dafuer gutschreibt
+## ([constant LetterOfMarque.PRIZE_REWARD]): Kapern bleibt unterm Strich ein
+## Verlust an Ansehen. Der Brief verschiebt nur, wo er anfaellt.
 const PRIZE_REPUTATION: int = -8
 
 ## Wieviel der Sieger dem Spieler abnimmt, wenn dessen Schiff aufgibt.
@@ -89,6 +93,17 @@ var _truce: float = 0.0
 ## Restliche Zeit, bis die Enterhaken wieder klar sind.
 var _grapple_recovery: float = 0.0
 
+## Der benannte Gegner auf See, oder null - siehe [Adversary].
+##
+## Hoechstens einer gleichzeitig, und er zaehlt nicht gegen [member max_ships]:
+## Ein Auftragsziel oder ein Kopfgeldjaeger soll nicht ausbleiben, weil gerade
+## zwei Frachter in der Naehe sind.
+var _named: Ship = null
+## Ist der Benannte ein Jaeger? Entscheidet, ob nach ihm Ruhe einkehrt.
+var _named_hunts: bool = false
+## Ruhe nach einem erledigten Kopfgeldjaeger, in Sekunden.
+var _bounty_rest: float = 0.0
+
 
 func setup(player_ship: Ship) -> void:
 	player = player_ship
@@ -102,6 +117,7 @@ func _physics_process(delta: float) -> void:
 		return
 	_truce = maxf(_truce - delta, 0.0)
 	_grapple_recovery = maxf(_grapple_recovery - delta, 0.0)
+	_bounty_rest = maxf(_bounty_rest - delta, 0.0)
 	_forget_freed_ships()
 	_update_targets()
 	_update_spawning(delta)
@@ -137,6 +153,10 @@ func _update_spawning(delta: float) -> void:
 		return
 	_spawn_timer = spawn_interval
 	_despawn_distant()
+	# Der Benannte hat Vorrang: Wer einen Auftrag traegt oder gesucht wird, soll
+	# nicht warten, bis der Zufall gerade Platz hat.
+	if _place_named():
+		return
 	if _ships.size() < max_ships:
 		_spawn()
 
@@ -166,11 +186,7 @@ func _spawn() -> void:
 		push_error("NavalCombat: Schiffsklasse nicht ladbar")
 		return
 
-	var packed: PackedScene = load(SHIP_SCENE)
-	var ship: Ship = packed.instantiate()
-	ship.player_controlled = false
-	add_child(ship)
-	ship.apply_class(ship_class)
+	var ship := _instantiate(ship_class)
 
 	# Heimatnation von der naechsten Stadt - ein spanisches Segel faehrt vor
 	# einer spanischen Kueste, nicht irgendwo.
@@ -187,6 +203,20 @@ func _spawn() -> void:
 	adopt(ship)
 	EventBus.ship_spawned.emit(ship)
 	EventBus.sail_sighted.emit(ship.ship_name, ship.nation_id, ship.warship)
+
+
+## Setzt ein Schiff einer Klasse in die Szene, ohne es schon zu bestuecken.
+##
+## Getrennt vom Zufallssegel, seit es einen zweiten Weg auf die See gibt: Ein
+## benannter Gegner bekommt Flagge, Namen und Kasse aus seinem Steckbrief und
+## nicht aus der naechsten Kueste.
+func _instantiate(ship_class: ShipClass) -> Ship:
+	var packed: PackedScene = load(SHIP_SCENE)
+	var ship: Ship = packed.instantiate()
+	ship.player_controlled = false
+	add_child(ship)
+	ship.apply_class(ship_class)
+	return ship
 
 
 ## Nimmt ein bestehendes Schiff als Gegner in die Welt auf: Kapitaen dazu,
@@ -311,6 +341,15 @@ func _forget_freed_ships() -> void:
 
 
 ## Setzt jedem Kapitaen den Spieler als Ziel, solange er ihn sehen kann.
+##
+## Seit M6 haengt das am Ruf. Vorher griff jede Patrouille jeden an - eine
+## frisch angefangene Kampagne wurde vom ersten spanischen Segel beschossen,
+## ohne dass Spanien einen Grund gehabt haette. Jetzt jagt nur, wer einen Grund
+## hat: ein feindliches Verhaeltnis, oder ein misstrauisches bei einer Nation,
+## die schnell zur Sache kommt (NationData.aggression).
+##
+## Wer beschossen wurde, jagt in jedem Fall - das entscheidet _on_ship_damaged
+## ueber [member ShipAI.provoked] und ist unabhaengig vom Ruf.
 func _update_targets() -> void:
 	for ship: Ship in _ships:
 		var captain := _captain_of(ship)
@@ -319,10 +358,32 @@ func _update_targets() -> void:
 		if _truce > 0.0:
 			captain.target = null
 			continue
+
 		var distance := _range_to_player(ship)
-		captain.target = player if distance <= ShipAI.ALERT_RANGE else null
-		if distance <= ShipAI.PROVOKE_RANGE:
+		var level := GameState.standing_with(ship.nation_id)
+		# Blosse Naehe macht nur den misstrauisch, der es ohnehin schon ist.
+		# Vorher wurde jedes Schiff im Umkreis von 300 Metern dauerhaft
+		# provoziert, auch das einer befreundeten Nation.
+		if distance <= ShipAI.PROVOKE_RANGE and Standing.wary_of_player(level):
 			captain.provoked = true
+
+		captain.target = player if distance <= ShipAI.ALERT_RANGE else null
+		captain.hostile = captain.provoked or hunts_player(ship)
+
+
+## Jagt dieses Schiff den Spieler von sich aus?
+##
+## Nur Kriegsschiffe jagen - ein Handelsschiff flieht auch dann, wenn seine
+## Nation den Spieler sucht. Oeffentlich, damit die Anzeige dieselbe Frage
+## stellen kann wie die KI und nicht ihre eigene Antwort erfindet.
+func hunts_player(ship: Ship) -> bool:
+	if not ship.warship:
+		return false
+	var nation := WorldData.get_nation(ship.nation_id)
+	return Standing.hunts_player(
+		GameState.standing_with(ship.nation_id),
+		nation.aggression if nation != null else 0.5
+	)
 
 
 func _captain_of(ship: Ship) -> ShipAI:
@@ -331,6 +392,130 @@ func _captain_of(ship: Ship) -> ShipAI:
 
 func _range_to_player(ship: Ship) -> float:
 	return ship.plan_position().distance_to(player.plan_position())
+
+
+# --- Benannte Gegner -------------------------------------------------------
+#
+# Der Auftrag des Gouverneurs und der Kopfgeldjaeger sind dieselbe Mechanik von
+# zwei Seiten: In beiden Faellen steht fest, wer da kommt, bevor er kommt. Der
+# Unterschied ist nur, wer ihn benannt hat - und ob er den Spieler sucht.
+
+## Setzt den benannten Gegner, wenn einer faellig ist.
+##
+## Gibt true zurueck, wenn dieser Takt damit verbraucht ist: Ein Auftragsziel
+## und ein zufaelliges Segel im selben Augenblick waeren zwei neue Schiffe auf
+## einen Schlag.
+func _place_named() -> bool:
+	# Verschwunden, versenkt oder als Prise weg - dann ist der Platz wieder frei.
+	if _named != null and (not is_instance_valid(_named) or not _ships.has(_named)):
+		_named = null
+		_named_hunts = false
+	if _named != null or player == null:
+		return false
+
+	var who := _named_due()
+	if who == null:
+		return false
+	var ship_class: ShipClass = load(who.ship_class_path)
+	if ship_class == null:
+		push_error("NavalCombat: Schiffsklasse nicht ladbar: %s" % who.ship_class_path)
+		return false
+	var spot := _open_water_near(player.plan_position())
+	if not spot.is_finite():
+		return false
+
+	var ship := _instantiate(ship_class)
+	ship.nation_id = who.nation_id
+	ship.ship_name = who.ship_name
+	ship.captain_name = who.captain_name
+	ship.global_position = Vector3(spot.x, 0.0, spot.y)
+	# Ein Jaeger dreht sofort bei, ein Auftragsziel faehrt seiner Wege hinaus.
+	ship.set_heading(SailingMath.bearing(spot, player.plan_position())
+		+ (0.0 if who.hunts else PI))
+
+	if who.hunts:
+		# Sein Vorschuss ist das eigene Kopfgeld: Wer teuer ausgeschrieben ist,
+		# bekommt einen teuer bezahlten Jaeger - und damit die beste Prise auf
+		# See ausgerechnet von dem Mann, den er am wenigsten treffen will.
+		ship.gold = Bounty.purse(GameState.notoriety)
+	else:
+		_load_prize(ship, WorldData.nearest_town(spot))
+
+	adopt(ship)
+	_named = ship
+	_named_hunts = who.hunts
+	# Ein Jaeger faengt gereizt an. Ohne das faehrt er vorbei, bis der Ruf
+	# seiner Krone ihn zufaellig doch noch scharf macht - dabei ist er genau
+	# deswegen ausgelaufen.
+	if who.hunts:
+		var captain := _captain_of(ship)
+		if captain != null:
+			captain.provoked = true
+
+	EventBus.ship_spawned.emit(ship)
+	EventBus.named_captain_sighted.emit(
+		who.captain_name, who.ship_name, who.nation_id, who.hunts
+	)
+	return true
+
+
+## Wer als Naechstes benannt auf See gehoert, oder null.
+##
+## Der Auftrag geht vor: Wer einen angenommen hat, soll sein Ziel finden, auch
+## wenn ihm gleichzeitig jemand nachgestellt wird. Sonst kaeme der Jaeger
+## dauernd dazwischen und die Frist liefe ab.
+##
+## Aber nur in seinem Revier. Bis hierher wurde das Auftragsziel gesetzt, wo
+## auch immer der Spieler gerade fuhr - man konnte einen Auftrag nicht suchen,
+## nur abwarten. Jetzt kreuzt der Gesuchte vor einem bestimmten Hafen (siehe
+## [member Commission.waters_town_id]), und wo der liegt, sagt der Wirt.
+## Ausserhalb bleibt der Platz frei, und der Kopfgeldjaeger rueckt nach.
+func _named_due() -> Adversary:
+	var order := GameState.commission
+	if order != null and not order.done and order.target != null and _in_waters(order):
+		return order.target
+	return _bounty_due()
+
+
+## Faehrt der Spieler gerade in den Gewaessern des Gesuchten?
+##
+## Ein Auftrag ohne festgelegtes Revier gilt ueberall - so kommen Spielstaende
+## aus der Zeit davor durch, und so fahren Auftraege, die ausserhalb eines
+## Hafens angenommen wurden.
+func _in_waters(order: Commission) -> bool:
+	var waters := WorldData.get_town(order.waters_town_id)
+	if waters == null:
+		return true
+	return Commission.in_waters(player.plan_position(), waters.position)
+
+
+## Der Kopfgeldjaeger, den gerade eine Krone schickt, oder null.
+func _bounty_due() -> Adversary:
+	if _bounty_rest > 0.0:
+		return null
+	for nation: NationData in WorldData.nations:
+		if Bounty.due(GameState.notoriety, GameState.standing_with(nation.id)):
+			return Bounty.hunter(rng, nation, GameState.notoriety)
+	return null
+
+
+## Verbucht einen erledigten Gegner beim Gouverneur.
+##
+## Eine Stelle fuer beide Wege: aufgebracht ([method take_prize]) und versenkt
+## ([method _on_ship_sunk]). Der Gouverneur wollte den Mann von der See haben,
+## und beides bringt ihn dorthin.
+func _settle_named(ship: Ship) -> void:
+	if ship.captain_name.is_empty():
+		return
+	GameState.commission_target_defeated(ship.captain_name, ship.nation_id)
+	if ship != _named:
+		return
+	_named = null
+	# Nach einem Jaeger ist eine Weile Ruhe - aber nur nach einem Jaeger. Ein
+	# Auftragsziel darf den naechsten Verfolger nicht aufhalten.
+	if _named_hunts:
+		_bounty_rest = Bounty.REST_SECONDS
+	_named_hunts = false
 
 
 # --- Breitseiten -----------------------------------------------------------
@@ -501,10 +686,17 @@ func take_prize(ship: Ship) -> void:
 			units += take
 
 	GameState.add_notoriety(PRIZE_NOTORIETY + (1 if ship.warship else 0))
+	EventBus.prize_taken.emit(ship.ship_name, ship.nation_id, ship.gold, units)
+
+	# Der Ruf faellt erst nach der Meldung ueber die Beute, nicht davor: Beide
+	# schreiben auf dieselbe Zeile im HUD, und stehen bleiben soll die Folge,
+	# nicht die Beute. Wer unter einem Kaperbrief den eigenen Auftraggeber
+	# aufbringt, ist ihn los - das darf nicht hinter "340 Gold" verschwinden.
 	if ship.nation_id >= 0:
 		GameState.change_reputation(ship.nation_id, PRIZE_REPUTATION)
+		GameState.settle_letter_prize(ship.nation_id)
+	_settle_named(ship)
 
-	EventBus.prize_taken.emit(ship.ship_name, ship.gold, units)
 	ship.gold = 0
 	ship.cargo.clear()
 	_release(ship)
@@ -584,6 +776,9 @@ func _release(ship: Ship) -> void:
 func _on_ship_sunk(ship: Ship) -> void:
 	EventBus.ship_sunk.emit(ship)
 	_ships.erase(ship)
+	# Auch ein versenkter Benannter ist erledigt. Sonst waere die beste
+	# Breitseite die schlechteste Art, einen Auftrag zu erfuellen.
+	_settle_named(ship)
 
 	# Ladung und Kasse gehen mit unter. Wer zu lange auf den Rumpf schiesst,
 	# versenkt seine eigene Beute - das ist der Preis fuer den kurzen Weg.

@@ -89,6 +89,12 @@ var target: Ship
 ## Handelsschiff erst, wenn es beschossen wird oder der Fremde dicht aufkommt.
 ## Ohne das ballert jede Brigg auf jeden, der zufaellig vorbeifaehrt.
 var provoked: bool = false
+## Sucht dieser Kapitaen das Gefecht?
+##
+## Gesetzt von NavalCombat aus dem Ruf seiner Nation, oder weil er beschossen
+## wurde. Ohne das faehrt er vorbei, auch wenn er ein Kriegsschiff ist: Nicht
+## jede Patrouille hat einen Grund, auf einen Handelskapitaen zu schiessen.
+var hostile: bool = false
 
 ## Auf welcher Seite wird der Gegner umkreist? Wechselt erst, wenn die andere
 ## Breitseite geladen ist - sonst dreht das Schiff bei jedem Schuss um.
@@ -124,7 +130,7 @@ func _decide() -> void:
 		return
 
 	var bearing := SailingMath.bearing(here, there)
-	var mood := stance(ship.warship, ship.hull_fraction(), distance)
+	var mood := stance(ship.warship and wants_battle(), ship.hull_fraction(), distance)
 
 	_circle_side = preferred_side(ship, bearing, _circle_side)
 	var desired := desired_heading(mood, here, there, _circle_side, WorldData.wind_direction)
@@ -134,9 +140,14 @@ func _decide() -> void:
 	_shoot(bearing, distance)
 
 
-## Grundhaltung aus Schiffstyp, Zustand und Entfernung.
-static func stance(warship: bool, hull_fraction: float, distance: float) -> Stance:
-	if not warship or hull_fraction < FLEE_HULL:
+## Grundhaltung aus Kampfbereitschaft, Zustand und Entfernung.
+##
+## [param fights] heisst: Dieses Schiff kann und will kaempfen - ein
+## Kriegsschiff, das einen Grund hat. Ein Handelsschiff hat nie einen, und ein
+## Kriegsschiff einer Nation, mit der man gut steht, auch nicht; beide fahren
+## davon statt aufeinander zu.
+static func stance(fights: bool, hull_fraction: float, distance: float) -> Stance:
+	if not fights or hull_fraction < FLEE_HULL:
 		return Stance.FLEE
 	if distance <= Gunnery.MAX_RANGE:
 		return Stance.ENGAGE
@@ -244,8 +255,20 @@ static func should_fire(
 	)
 
 
+## Sucht dieser Kapitaen ueberhaupt Streit?
+##
+## Eine Stelle fuer beide Fragen, die daran haengen: ob er auf Gefechtskurs geht
+## ([method stance]) und ob er feuert ([method _shoot]). Als die beiden getrennt
+## gerechnet wurden, floh ein provozierter Kapitaen und schoss dabei - er lief
+## davon und feuerte nach hinten.
+func wants_battle() -> bool:
+	return hostile or provoked
+
+
 func _shoot(bearing: float, distance: float) -> void:
-	if not (ship.warship or provoked):
+	# Ohne die Einschraenkung auf Kriegsschiffe: Ein Handelsschiff flieht zwar
+	# (siehe stance), wehrt sich aber, wenn es beschossen wird.
+	if not wants_battle():
 		return
 	for side: int in [Gunnery.PORT, Gunnery.STARBOARD]:
 		if not ship.battery_ready(side):

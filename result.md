@@ -1,149 +1,174 @@
-# Entern gebaut, Unterbesetzung sichtbar
+# M6, vierter Schritt: die Kronen unter sich, und eine Schenke
 
-Stand: 31. August 2026. Übergabe an die nächste Sitzung.
+Stand: 3. September 2026. Übergabe an die nächste Sitzung.
 
-Die vorige Sitzung hat das Geschützrichten neu gebaut; das steckt jetzt in Commit `13a2d93`
-(„Geschützrichten: die Flugbahn entscheidet, nicht der Würfel"). Diese Sitzung hat den
-Nutzer gefragt, wie es weitergeht, und drei Antworten bekommen:
-
-1. **Das Gefecht fühlt sich für ein MVP gut an** — keine Stellschraube anzufassen.
-2. **„Prise behalten statt verwerten" zunächst draußen lassen** — später im Gespräch
-   zurückgenommen: Die Prise **soll** behalten werden können, nur nicht jetzt.
-3. Committen und weitermachen.
+Zuletzt abgelegt: `6e1a484` (Entern und neun Waren). Seitdem lagen **alle vier M6-Schritte
+uncommittet** im Arbeitsverzeichnis; dieser Schritt wird mit ihnen zusammen abgelegt.
 
 ---
+
+## Was vorher offen war
+
+Zwei Dinge, und beide standen als Kommentar im Code:
+
+- **Der Kaperbrief deckte alles außer der eigenen Flagge.** In `LetterOfMarque.covers` stand
+  dazu, dass es eigentlich der Krieg entscheiden müsste — den es nicht gab. Ein Brief, der
+  jede fremde Prise gutschreibt, ist aber ein Freibrief und keine Entscheidung.
+- **Ein Auftragsziel wurde einfach in Sichtweite gesetzt**, egal wo man fuhr. Man konnte
+  einen Auftrag nicht *suchen*, nur abwarten — und `Commission.DAYS` = 8 befristete nichts.
 
 ## Was gebaut wurde
 
-**Das Entern** (`world/combat/boarding.gd`). Bis hierher führte genau ein Weg zur Prise —
-den Gegner beschießen, bis er streicht. Damit war Mannschaft im Gefecht nur etwas, das man
-*verliert*. `Ship.readiness()` behauptet seit M4 im eigenen Kommentar, die ersten Verluste
-kosteten „Enterstärke"; es gab keine. Jetzt gibt es zwei Antworten auf ein fremdes Segel:
+### `world/politics/diplomacy.gd` — wer mit wem Krieg führt
 
-| | Reichweite | Kosten | Dauer |
-|---|---|---|---|
-| Zusammenschießen | 420 m | Zeit, Pulver, eigener Rumpf | Minuten |
-| Entern | 45 m | Leute | ein Zug |
+**Zu jeder Zeit liegt jede Krone mit genau einer anderen im Krieg.** Vier Nationen lassen
+sich auf genau drei Arten so paaren; die Lage ist immer eine dieser drei. Das ist an beiden
+Enden enger als „jeder gegen jeden nach Würfel", und mit Absicht:
 
-Als **Wurf-Auflösung**, nicht als Taktikgefecht — Abschnitt 6 des Konzepts sieht das für
-Tier 0 ausdrücklich so vor; das Gitterfeld aus 3.4 ist Tier 1 und braucht Offiziere, die es
-noch nicht gibt. Beschrieben in `docs/KONZEPT.md` 7.8b.
+- Ein **allgemeiner Friede** schaltete Kaperbrief und Auftrag ab, also das halbe Spiel — und
+  der Spieler hätte nichts in der Hand dagegen.
+- Ein **allgemeiner Krieg** wäre der Zustand von vorher.
 
-**Die ganze Auflösung hängt an einer Zahl.** `Boarding.odds()` liefert den Anteil des
-Angreifers an der Gesamtstärke und ist zugleich seine Siegchance **und** das Maß für die
-Verluste beider Seiten. Damit braucht es keine getrennte Regel für Sieger und Verlierer: Ein
-aussichtsloser Sturm ist ein Gemetzel für den Angreifer, ein übermächtiger kostet fast
-nichts, Augenhöhe kostet beide die Hälfte.
+Die Paarung ist die interessante Mitte: Der Brief deckt genau eine Flagge, und welche das
+ist, sucht man sich mit dem Patron aus.
 
-**Die Unterbesetzung ist sichtbar geworden.** `Ship.handling()` nimmt seit dem
-Geschützrichten Fahrt weg, wenn die Mannschaft unter `min_crew` fällt — nur stand das
-nirgends. Der Knotenmesser zeigte zu wenig, und das Schiff sah unbeschädigt aus. Jetzt nennt
-die Zustandszeile den Grund („5 von 8 Mann · unterbesetzt") und färbt die Fahrt rot; die
-Werft schreibt dasselbe dazu. Die Formel ist dafür von `Ship` nach `SailingMath` gewandert —
-HUD und Hafen brauchen sie, wenn gar kein Schiff in der Szene hängt.
+| | |
+|---|---|
+| Gehalten wird | **nichts.** Die Lage ist eine reine Funktion aus Weltseed und Spieltag, wie der Steckbrief in `Commission.offer`. Kein Feld im Spielstand, keine zweite Wahrheit |
+| Wechselt alle | 24 Spieltage (`ERA_DAYS`) — dreimal die Frist eines Auftrags, damit ein Krieg die Jagd überdauert, die unter ihm begonnen wurde |
+| Und dann wirklich | Der Schritt durch die drei Lagen ist immer eins oder zwei, nie null. Jede Krone bekommt dabei einen anderen Feind |
+| Wirkt auf | `LetterOfMarque.covers` (was der Brief deckt) und `Commission.offer` (wen der Gouverneur ausschreibt) — genau die beiden markierten Stellen |
 
-**Anheuern gab es schon.** Ich hatte in der Bestandsaufnahme behauptet, Mannschaft sei eine
-Einbahnstraße. Falsch: `Shipyard.hire()` sitzt seit M4 in der Werft, mit Handgeld je Mann und
-Teilanheuerung. Ich hatte in `modes/port/port_mode.gd` gesucht statt in
-`ui/port/shipyard_panel.gd`.
+**Ein laufender Auftrag überlebt den Friedensschluss.** Ihn zu annullieren war die
+naheliegende Alternative und wäre falsch gewesen: Bei 8 Tagen Frist und 24 Tagen Legislatur
+verlöre etwa jeder dritte Auftrag durch einen Würfel, den der Spieler nicht sieht und gegen
+den er nichts tun kann. Der Gouverneur hat den Mann ausgeschrieben, und ein Steckbrief wird
+nicht dadurch gegenstandslos, dass die Kronen sich vertragen.
 
----
+### `world/economy/tavern.gd` + `ui/port/tavern_panel.gd` — die Schenke
 
-## Die Zahlen, die die Mechanik tragen
+Der vierte Hafenbildschirm. **Anheuern** ist aus der Werft hierher gezogen, wo der Kommentar
+seit M4 selbst sagte, dass es nicht dorthin gehört — und hat einen zweiten Grund bekommen:
+**Berüchtigtheit senkt das Handgeld** um bis zu ein Drittel. Das ist die erste Folge dieser
+Achse, die dem Spieler *nützt*; bis dahin hat sie ihm nur Jäger geschickt. Eine Achse, die
+nur kostet, ist so wenig eine Entscheidung wie eine, die nur hilft.
 
-Bei gleicher Mannschaft steht der Sturm auf **0,43** — schlecht. Das ist Absicht
-(`DEFENCE_BONUS` 1,35): Ohne den Verteidigungsvorteil wäre Entern immer die richtige Antwort
-und das ganze Schießen überflüssig. Drei Dinge verschieben ihn:
+**Das Gerede** ist der eigentliche Ertrag. Fünf Zeilen, jede aus einer eigenen Bedingung:
+Politik (und was der eigene Brief deshalb deckt), der Gesuchte, der Jäger, ein Handelstipp
+in einen Nachbarhafen, und was man über einen selbst sagt.
 
-- **Ein zerschossener Rumpf** nimmt den Verteidigern den Mut (`HULL_MORALE`). Eine Breitseite
-  vor dem Übersetzen lohnt sich also, auch wenn sie den Gegner nicht zum Streichen bringt.
-- **Berüchtigtheit** zählt an Deck (`FEAR_BONUS`) — der gefürchtete Pirat aus 3.4. Zum ersten
-  Mal zahlt sich ein Ruf im Spiel überhaupt aus.
-- **Überzahl**, offensichtlich.
+**Der Gesuchte kreuzt jetzt irgendwo.** Bei der Annahme wird sein Revier festgelegt
+(`Commission.waters_for`): der Hafen seiner eigenen Flagge, der dem Ort der Zusage am
+nächsten liegt. `NavalCombat` setzt ihn nur innerhalb von 3000 m davon; außerhalb bleibt der
+Platz frei und der Kopfgeldjäger rückt nach.
 
-In Klassen gerechnet: volle Schaluppe (40 Mann) gegen unversehrte Handelsbrigg (26) = 0,53,
-knapp lohnend. Gegen eine unversehrte Patrouillenschaluppe (46) = 0,39 — dafür muss man erst
-schießen oder sich einen Ruf erarbeitet haben. Genau diese Abwägung soll die Mechanik tragen.
+**Und das Revier steht nicht auf dem Steckbrief.** Der Palast sagt, *wer* gesucht wird, und
+verweist auf die Schenke; der Wirt sagt, *wo*. Erst danach steht der Ort auf der Seekarte
+(`Commission.waters_known` — das einzige Bit Zustand, das ein Besuch hinterlässt). Ohne
+diese Trennung wäre die Schenke ein Bildschirm, den niemand je öffnen müsste.
 
-Nach einem Sturm sind die Enterhaken 25 Sekunden unklar. Ohne diese Sperre wäre ein
-abgeschlagener Sturm nur ein zweiter Tastendruck.
+**Sichtbar an vier Stellen** (Regel A8): die Zeile *„Krieg: …"* über der **Seekarte**, der
+Absatz im **Gouverneurspalast** („Er deckt Prisen gegen englische Segel — der Krieg dieser
+Krone geht gegen England"), dasselbe als Gerede in der **Schenke**, und eine **Meldung im
+HUD** an dem Tag, an dem neu verhandelt wird. Die HUD-Meldung ist keine Zugabe: Ohne sie
+fände man erst beim nächsten Aufbringen heraus, dass der Brief eine andere Flagge deckt als
+gestern.
 
----
+## Was Grammatik gekostet hat
 
-## Der Fehler, der eine Regel wurde
+Drei der vier Kronen sind Eigennamen ohne Artikel, die vierte ist ein Plural mit einem. Im
+Bild stand zuerst *„Niederlande liegt im Krieg mit England"* und *„die Niederlande hat ein
+Kopfgeld ausgesetzt"* — beides falsch, und beides nur in der Aufnahme zu sehen.
 
-Prise, Entern und Anlegen liegen alle auf der Leertaste und teilen sich eine Zeile im HUD.
-Jedes der drei Signale hat die Zeile für sich beschrieben — und beim Leerwerden *gelöscht*.
-Fuhr man an einem Hafen vorbei und geriet dabei ein Gegner aus der Enterreichweite,
-verschwand die Aufforderung zum Anlegen, obwohl der Hafen noch dalag.
-
-Angelegt war der Fehler schon zwischen Prise und Hafen; mit dem dritten Schreiber wurde er
-echt. Steht jetzt als **Regel B15** in `docs/RICHTLINIEN.md`: *Ein Anzeigefeld hat einen
-Schreiber* — und zwar ab dem zweiten Signal, nicht ab dem dritten.
-
----
+Behoben mit **einem** neuen Feld (`NationData.name_article`, nur bei den Niederlanden
+gefüllt) und einer Regel: `subject_name()` liefert den Nominativ („die Niederlande"), und
+der ist bei allen vieren auch der Akkusativ — deshalb funktioniert *„gegen die
+Niederlande"* damit ebenfalls. Jeder Satz, der einen anderen Fall oder ein anderes Verb
+bräuchte, wird stattdessen über das **Adjektiv** gebaut („eine niederländische Fregatte",
+„gegen englische Segel"), das im Projekt ohnehin überall benutzt wird.
 
 ## Geprüft
 
-- **Rauchtest: 413 Prüfungen, bestanden.** Darunter der Enterkampf gerechnet (Reichweite,
-  Stärkeverhältnis, Verluste, 400 Läufe gegen die Siegchance) *und* durch die Szene gefahren
-  (Regel C6): längsseits gehen, übersetzen, Deck nehmen, danach liegt er als Prise da und die
-  Haken sind unklar.
-- **`tests/capture_battle.tscn` hat drei Aufnahmen dazubekommen** — Enterreichweite, der
-  Sturm mit seiner Verlustmeldung, und die rote Zustandszeile danach. Alle acht angesehen.
-- `capture_sailing` und `capture_port` ebenfalls: Zustandszeile und Werft stimmen.
-- `capture_island`, `capture_town` und `capture_ship` **nicht** neu gefahren — an Gelände,
-  Siedlungen und Schiffsmodell wurde nichts angefasst.
+- **Rauchtest: 718 Prüfungen, bestanden** (vorher 607). Darunter die Paarungstabelle
+  vollständig durchgegangen — jede Zeile ist ihre eigene Umkehrung, jede Krone hat genau
+  einen Feind, und jede Umwälzung gibt jeder Krone einen *anderen*. Dazu der Kalender, die
+  Determinismus- und die Wechsel-Eigenschaft, die Meldung genau am Tag der Neuordnung, und
+  durch die Szene gefahren (Regel C6): **Der Gesuchte läuft in seinem Revier aus und
+  außerhalb nicht.**
+- **Der Kaperbrief wird jetzt am Kriegsgegner geprüft, nicht an Spanien.** Die alten
+  Prüfungen nahmen an, dass ein englischer Brief eine spanische Prise deckt — das hängt seit
+  diesem Schritt am Seed. Sie fragen jetzt `WorldData.enemy_of()` und prüfen zusätzlich, dass
+  eine Prise gegen eine Krone im Frieden **nichts** einbringt.
+- **Der Spielstand** ist auf Version 5 gegangen und trägt Revier und Gehörtes mit. Die Lage
+  der Kronen steht bewusst *nicht* darin.
+- **Sichtprüfungen angesehen:** `capture_port` (jetzt neun Aufnahmen — Schenke als 16,
+  Palast mit bekanntem Revier als 17), `capture_sailing` (die Kriegszeile und der Ortsname
+  in der Auftragszeile passen beide in die Breite), `capture_battle` (unverändert im Inhalt,
+  zur Sicherheit gefahren).
+- **Duell-Messlauf nicht gefahren** — an Ballistik, KI und Kampfbereitschaft wurde nichts
+  angefasst. `NavalCombat` hat nur eine Bedingung mehr davor, *ob* ein Benannter gesetzt wird.
 
-Eine Prüfung schlug zunächst fehl und war selbst falsch: Sie erwartete, dass die
-Enterverluste in `GameState` landen. Diese Verdrahtung macht `SailingMode`, das im Rauchtest
-gar nicht läuft. Geprüft wird jetzt das Signal `Ship.condition_changed`, an dem sie hängt.
+## Was als Nächstes zu M6 gehört
 
----
+**Offiziere** (`KONZEPT.md` 5.1) — der letzte offene Punkt der Schenke, und er ist bewusst
+liegengeblieben: Offiziere sind dort Charaktere mit eigener Loyalität, die im Enter-Gefecht
+eigene Einheiten führen und sterben können. Beides — Crew-Moral und taktisches Deckgefecht —
+gibt es nicht. Ein Offizier ohne das wäre ein Zahlenaufschlag mit Namen, also genau das, was
+5.1 ausschließt. Er gehört zu Tier 1, zusammen mit dem, was ihn trägt.
 
-## Was offen ist
+**Nicht gebaut und ausdrücklich Tier 2:** dass Kriegsparteien einander auf See angreifen.
+`ShipAI` kennt genau einen Gegner, den Spieler (`NavalCombat._opponent_of` sagt das auch so);
+eine Seeschlacht mit drei Parteien ist ein eigener Brocken und steht in Abschnitt 6 als
+„Nationen-Kriege mit dynamischen Frontverläufen".
 
-An M5 hängt die Abnahmebedingung „ein kompletter Aufstieg vom Startschiff zu einem größeren
-Schiff ist spielbar". Dafür fehlen **beide** Wege zu einem besseren Schiff:
+**Und weiter offen aus M5:** der Schiffskauf und die Übernahme einer Prise. Das ist jetzt der
+größte Mangel im Spiel — ab dem dritten Auftrag ist das Ziel eine Fregatte, und eine Fregatte
+mit einer Startschaluppe zu stellen ist eine Zumutung. Gemeint ist **ein** Schiff (das
+Prisenschiff gegen das eigene tauschen), nicht mehrere; Flottenführung bleibt Tier 2.
 
-- **Der Schiffskauf.** `base_price` steht bereits in jeder `.tres`; es fehlt der Bildschirm
-  in der Werft und der Wechsel der Klasse im laufenden Spiel.
-- **Die Prise übernehmen.** Der Nutzer wollte das zuerst herauslassen und hat es im selben
-  Gespräch zurückgenommen: Es **soll** gebaut werden, nur später. Heute räumt
-  `NavalCombat.take_prize()` das Schiff aus und `_release()` lässt es davontreiben; dort
-  gehört die Entscheidung hin. Gemeint ist **ein** Schiff — das Prisenschiff gegen das eigene
-  tauschen, mit allem, was daran hängt: Ladung umladen oder verlieren, Mannschaft aufteilen,
-  der eigene Rumpf ist weg. *Mehrere* Schiffe zu führen ist Flottenführung (KONZEPT 5.4) und
-  bleibt Tier 2. Wer das verwechselt, baut aus einem M5-Schritt ein Tier-2-System.
-- **Ziellinie aus der mittleren Kanone** (Regel A8). Der Nutzer sagt, das Gefecht fühle sich
-  für ein MVP gut an — also nicht gebaut. Bleibt vorgemerkt, falls sich das Zielen später
-  doch blind anfühlt.
-- **Die Meeresoptik** — Diagnose und Maßnahmen in `docs/KONZEPT.md` 11. **Weiterhin
-  ausdrücklich auf später verschoben, nicht ungefragt anfangen.**
+## Offene Kalibrierung
+
+Drei Zahlen sind abgeleitet oder geraten, keine ist gemessen:
+
+- **`Diplomacy.ERA_DAYS` = 24** ist aus `Commission.DAYS` abgeleitet (dreimal die Frist),
+  nicht gespielt. Rund anderthalb Stunden Echtzeit — wenn sich eine Umwälzung zu selten
+  anfühlt, ist das die Zahl.
+- **`Commission.WATERS_RANGE` = 3000 m** ist gegen `NavalCombat.DESPAWN_DISTANCE` (2600 m)
+  gesetzt, damit man dem Gesuchten während der Verfolgung nicht aus seinem eigenen Revier
+  fährt. Ob die Frist von acht Tagen für die Anfahrt reicht, hängt daran, wie weit der
+  nächste Hafen der gesuchten Flagge liegt — das ist noch nicht gemessen. `world_report.tscn`
+  wäre der Ort dafür (Regel C4).
+- **`Tavern.FAME_DISCOUNT` = 0,35** und **`Bounty.HUNTED_FROM` = 35** sind beide geraten.
 
 ## Fallen
 
-**Ein neues `class_name` braucht `godot --headless --import`.** Bei `Boarding` wieder
-zugeschlagen — das dritte Mal in zwei Sitzungen. `Boarding.Result` ist deshalb eine *innere*
-Klasse: eine Datei weniger, ein Import weniger, den man vergessen kann.
+**Backslashes überleben ein Heredoc nicht.** Der Bash-Kanal in dieser Umgebung wandelt `\\`
+in `\` um, bevor Python die Zeile sieht — ein Suchmuster mit `\n` darin findet nichts, und
+die Meldung ist ein nacktes `AssertionError`. Wer per Skript in Formatzeichenketten patcht,
+baut den Backslash über `chr(92)`.
 
-**`godot` liegt auf diesem Rechner nicht im PATH.** Der volle Pfad ist
-`%LOCALAPPDATA%\Programs\Godot\Godot_v4.7.2-stable_win64_console.exe`.
+**`const` nimmt kein `PackedInt32Array(...)`.** „Assigned value for constant isn't a constant
+expression" — verschachtelte einfache Arrays gehen, der typisierte Konstruktor nicht.
 
-**Der Rauchtest braucht länger als das Werkzeug-Zeitlimit von drei Minuten.** Im Hintergrund
-laufen lassen und in eine Logdatei schreiben — und zwar in **je eine eigene**: Zwei Läufe auf
-dieselbe Datei haben mich einmal einen Fehlschlag lesen lassen, der aus dem älteren Lauf kam.
+**`godot` liegt nicht im PATH.** Voller Pfad:
+`%LOCALAPPDATA%\Programs\Godot\Godot_v4.7.2-stable_win64_console.exe`
 
-**Ein zwei Stunden alter, leerer `.git/index.lock` blockierte git.** Abgestürzter Vorgang,
-kein laufender — entfernt.
+**Der Rauchtest braucht hier gut fünf Minuten**, nicht die im README genannte halbe Minute.
+Nicht mit einem Hänger verwechseln — im Vordergrund läuft er in eine Zeitüberschreitung.
 
-## Arbeitsverzeichnis
+**Aufnahmen liegen unter `%APPDATA%\Godot\app_userdata\PirateGame\captures`**, nicht unter
+dem in `CLAUDE.md` genannten Linux-Pfad.
 
-`13a2d93` enthält das Geschützrichten. **Alles aus dieser Sitzung ist uncommittet.** Der
-Nutzer hat für den vorigen Stand um einen Commit gebeten, nicht pauschal für alles Weitere —
-also nachfragen.
+**Ein neues `class_name` braucht `godot --headless --import`.** Bei `Diplomacy` und `Tavern`
+erneut.
 
-Die veröffentlichte Seite ist weiterhin auf M3-Stand:
-<https://claude.ai/code/artifact/e6bc946a-c855-4ece-8db9-0bb6c93042f6> — wer sie
+**Jeder Testlauf in eine eigene Logdatei.** Zwei Läufe auf dieselbe Datei haben schon einmal
+einen Fehlschlag aus einem älteren Lauf vorgetäuscht.
+
+## Veröffentlichte Seite
+
+<https://claude.ai/code/artifact/e6bc946a-c855-4ece-8db9-0bb6c93042f6> — steht auf dem Stand
+nach M4 und dem Entern. **M6 fehlt dort noch, inzwischen in vier Schritten.** Wer sie
 aktualisiert, benutzt diese URL wieder und holt sich den Bestand vorher über
-`action: "read"`.
+`action: "read"`; sie wurde zuletzt von anderer Seite neu veröffentlicht, die lokale Kopie
+ist also nicht maßgeblich.

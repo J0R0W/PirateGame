@@ -7,7 +7,15 @@ Ein Piraten-Sandbox-Spiel in der Tradition von *Sid Meier's Pirates!*, gebaut mi
 Segeln, in einem Hafen anlegen, günstig kaufen, woanders teuer verkaufen, das Schiff instand
 setzen, Leute anheuern — und unterwegs ein fremdes Segel längsseits nehmen. Seit Neuestem auf
 zwei Wegen: zusammenschießen, bis die Flagge fällt, oder übersetzen und es an Deck ausfechten.
-Offen aus M5: der Schiffskauf und die Übernahme einer Prise — und damit der eigentliche Aufstieg.
+Seit Neuestem reagiert die Welt: Wer eine Nation ausplündert, wird von ihren Patrouillen
+gejagt und aus ihren Häfen ausgesperrt — und wer sich beim Gouverneur einen Kaperbrief holt,
+dem schreibt dessen Krone jede Prise gegen ihren Kriegsgegner gut. Denn die vier Kronen haben
+ein Verhältnis zueinander: Jede liegt mit genau einer anderen im Krieg, und alle 24 Spieltage
+wird neu verhandelt. Derselbe Gouverneur hängt Steckbriefe aus: einen benannten Kapitän
+stellen, zurückfahren, Bericht erstatten — wo der Mann kreuzt, erfährt man nebenan in der
+Schenke, in der man auch anheuert. Wer sich dabei genug Feinde macht, wird selbst
+ausgeschrieben und bekommt einen Kopfgeldjäger auf den Hals. Offen aus M5: der Schiffskauf
+und die Übernahme einer Prise — und damit der eigentliche Aufstieg.
 
 ## Dokumentation
 
@@ -28,13 +36,17 @@ godot --path .
 godot --headless --path . res://tests/smoke_test.tscn
 ```
 
-413 Prüfungen: Autoloads, Eingabebelegung, Kampagnenstart, Speicher-Roundtrip,
+718 Prüfungen: Autoloads, Eingabebelegung, Kampagnenstart, Speicher-Roundtrip,
 Segelmathematik, Winkelkonvention, Wellenfeld, Schiffsgeometrie, Weltgenerierung
 (Landanteil, Weltrand, Hafenabstände, Nationsbesitz, Determinismus), Ankerplätze,
-Stadtterrassen, Siedlungen, Preisbildung, Handel, Werft, Anheuern, Fahrbarkeit unter der
+Stadtterrassen, Siedlungen, Preisbildung, Handel, Werft, Anheuern und Gerüchte in der
+Schenke, Fahrbarkeit unter der
 Mindestbesatzung, Ballistik, Vorhalten, Trefferentscheid, Trefferzonen, Schiffs-KI, Prisen,
-Enterkämpfe, die Stellschrauben des Debug-Menüs sowie Gelände-Chunks, Grundberührung,
-Projektregeln und die Frage, ob überhaupt jedes Skript kompiliert.
+Enterkämpfe, Ruf und seine Folgen, Krieg und Frieden zwischen den Kronen, Kaperbriefe,
+Gouverneurs-Aufträge samt dem Revier des Gesuchten, Kopfgeldjäger, die
+Stellschrauben des Debug-Menüs sowie
+Gelände-Chunks, Grundberührung, Projektregeln und die Frage, ob überhaupt jedes Skript
+kompiliert.
 
 Darunter die Abnahmebedingungen der Meilensteine selbst, gefahren statt behauptet:
 
@@ -46,6 +58,12 @@ Darunter die Abnahmebedingungen der Meilensteine selbst, gefahren statt behaupte
 - **M5 (teilweise)** — ein Gegner wird wirklich geentert: längsseits gehen, übersetzen, das
   Deck nehmen, und danach liegt er als Prise da statt als Enterziel. Die Enterhaken bleiben
   danach eine Weile unklar.
+- **M6 (teilweise)** — ein Kaperbrief wird ausgestellt, eine wirklich genommene Prise gegen
+  Englands Kriegsgegner kommt beim englischen Patron an, eine gegen eine Krone im Frieden
+  nicht, und die englische Prise danach kostet den Brief. Dazu ein Auftrag von Anfang bis
+  Ende: Der Benannte läuft in seinem Revier aus — und nur dort —, wird längsseits genommen
+  und beim Gouverneur gemeldet. Und ein Kopfgeldjäger fährt aus, sobald Berüchtigtheit und
+  Feindschaft zusammenkommen.
 
 Das Gefecht wird dabei wirklich gefahren — zwei volle Duelle im Zeitraffer, deshalb
 dauert der Durchlauf gut eine halbe Minute. Exit-Code 0 = bestanden.
@@ -86,8 +104,10 @@ godot --path . res://tests/capture_battle.tscn
 ```
 
 Zeigt eine Küste vier Mal (vollständig, ohne Dunst, ohne Wasser, Drahtgitter), eine
-Siedlung aus drei Abständen, den Hafenbildschirm mit Markt, Kauf und Werft sowie ein
-Seegefecht in fünf Schritten (Segel in Sicht, längsseits, Breitseite, Einschlag, Prise).
+Siedlung aus drei Abständen, den Hafenbildschirm mit Markt, Kauf, Werft, Schenke und
+Gouverneurspalast (ohne Kaperbrief, mit Brief, mit ausgehängtem Steckbrief, mit bekanntem
+Revier und mit erledigtem Auftrag) sowie ein Seegefecht in seinen Schritten (Segel in Sicht, längsseits,
+Breitseite, Einschlag, Entern, Prise, Kopfgeldjäger).
 Damit lässt sich unterscheiden, ob ein Darstellungsfehler vom Gelände, vom Wasser oder von
 der Atmosphäre kommt — und ob Häuser wirklich auf dem Hang stehen.
 
@@ -180,6 +200,11 @@ Knopf, der sofort eines setzt. Dazu ein Schalter für das Gitternetz auf dem Was
 davon landet in einer Speicherdatei; der Knoten fällt vor einem Release aus
 `modes/sailing/sailing_mode.tscn`.
 
-Im Hafen: **Markt**, **Werft**, **Speichern**, **Ablegen** — oder **Esc** zum Auslaufen.
-Die Werft setzt Rumpf und Segel instand und heuert Mannschaft an; beides geht auch
-anteilig, wenn das Gold nicht für alles reicht.
+Im Hafen: **Markt**, **Werft**, **Schenke**, **Gouverneur**, **Speichern**, **Ablegen** —
+oder **Esc** zum Auslaufen. Die Werft setzt Rumpf und Segel instand, die Schenke heuert
+Mannschaft an; beides geht auch anteilig, wenn das Gold nicht für alles reicht. In der
+Schenke steht außerdem, was man sich erzählt: wer mit wem Krieg führt, wo der Gesuchte
+kreuzt, wer ein Kopfgeld auf einen ausgesetzt hat und wo eine Ware von hier gut bezahlt
+wird. Beim Gouverneur steht, was seine Krone von einem hält; dort gibt es den Kaperbrief und
+darunter den Auftrag. In einem Dorf sitzt keiner — der erste Grund im Spiel, eine größere
+Stadt anzulaufen, der nichts mit Preisen zu tun hat.

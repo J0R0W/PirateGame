@@ -1,8 +1,12 @@
 ## Die Werft.
 ##
-## Zeigt den Zustand des Schiffes und was Instandsetzung und Anheuern kosten.
-## Beides sind die laufenden Ausgaben im Spiel - deshalb stehen die Preise
-## gross da und nicht in einer Bestaetigung versteckt.
+## Zeigt Rumpf und Segel und was ihre Instandsetzung kostet. Der Preis steht
+## gross da und nicht in einer Bestaetigung versteckt: Reparieren ist die
+## laufende Ausgabe im Spiel.
+##
+## Die Mannschaft stand hier bis M6 mit dabei. Sie steht jetzt in der Schenke,
+## wo sie hingehoert ([TavernPanel]) - eine Werft setzt Holz instand, keine
+## Leute.
 class_name ShipyardPanel
 extends VBoxContainer
 
@@ -12,11 +16,8 @@ var town: TownData
 
 var _hull: Label
 var _sails: Label
-var _crew: Label
 var _cost: Label
 var _button: Button
-var _crew_cost: Label
-var _crew_button: Button
 
 
 func setup(target: TownData) -> void:
@@ -44,19 +45,12 @@ func setup(target: TownData) -> void:
 
 	_hull = _condition_row(condition, "Rumpf")
 	_sails = _condition_row(condition, "Segel")
-	_crew = _condition_row(condition, "Mannschaft")
 
 	add_child(_spacer())
 
 	_cost = PortWidgets.label("", Palette.BRASS, 17)
 	add_child(_cost)
 	_button = _action("Instandsetzen", _on_repair_pressed)
-
-	add_child(_spacer())
-
-	_crew_cost = PortWidgets.label("", Palette.BRASS, 17)
-	add_child(_crew_cost)
-	_crew_button = _action("Mannschaft anheuern", _on_hire_pressed)
 
 	refresh()
 
@@ -83,25 +77,10 @@ func _action(caption: String, handler: Callable) -> Button:
 func refresh() -> void:
 	var hull_max := GameState.max_hull()
 	var sails_max := GameState.max_sails()
-	var crew_max := GameState.max_crew()
 	_hull.text = "%d / %d" % [GameState.hull, hull_max]
 	_sails.text = "%d / %d" % [GameState.sails, sails_max]
-	# Die Mannschaft wird nach der Bedienung gefaerbt, nicht nach dem Anteil an
-	# der Hoechstzahl - genau wie im HUD. Eine Schaluppe faehrt mit vierzig Mann
-	# und braucht acht: Die Haelfte zu verlieren sieht nach der Haelfte aus,
-	# kostet aber noch keinen einzigen Ladevorgang. Wer unter die Mindest-
-	# besatzung faellt, verliert dagegen Fahrt, und das steht dann auch da.
-	if GameState.handling() < 1.0:
-		_crew.text = "%d / %d — unter der Mindestbesatzung von %d" % [
-			GameState.crew, crew_max, GameState.min_crew()
-		]
-	else:
-		_crew.text = "%d / %d" % [GameState.crew, crew_max]
 	PortWidgets.paint(_hull, _state_color(float(GameState.hull) / float(maxi(hull_max, 1))))
 	PortWidgets.paint(_sails, _state_color(GameState.sail_condition()))
-	PortWidgets.paint(_crew, _state_color(GameState.readiness()))
-
-	_refresh_crew()
 
 	var cost := Shipyard.full_repair_cost(town)
 	if cost <= 0:
@@ -121,37 +100,6 @@ func refresh() -> void:
 			cost, GameState.gold
 		]
 		PortWidgets.paint(_cost, Palette.FAIR)
-
-
-## Anheuern kostet Gold und bringt Ladezeit und Treffsicherheit zurueck -
-## deshalb steht dabei, wofuer man zahlt.
-func _refresh_crew() -> void:
-	var missing := Shipyard.crew_missing()
-	if missing <= 0:
-		_crew_cost.text = "Die Mannschaft ist vollzählig."
-		PortWidgets.paint(_crew_cost, Palette.HUD_DIM)
-		_crew_button.disabled = true
-		return
-
-	var cost := Shipyard.full_hire_cost(town)
-	_crew_button.disabled = GameState.gold < Shipyard.hire_cost(town, 1)
-	if GameState.gold >= cost:
-		_crew_cost.text = "%d Mann anheuern: %d Gold" % [missing, cost]
-		PortWidgets.paint(_crew_cost, Palette.BRASS)
-	else:
-		_crew_cost.text = "%d Mann anheuern: %d Gold — du hast %d. Es kommt, wer bezahlt wird." % [
-			missing, cost, GameState.gold
-		]
-		PortWidgets.paint(_crew_cost, Palette.FAIR)
-
-
-func _on_hire_pressed() -> void:
-	var count := Shipyard.hire(town)
-	refresh()
-	if count <= 0:
-		repaired.emit("Für Handgeld reicht das Gold nicht.")
-	else:
-		repaired.emit("%d Mann kommen an Bord." % count)
 
 
 func _on_repair_pressed() -> void:

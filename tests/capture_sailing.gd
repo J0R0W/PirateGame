@@ -47,7 +47,21 @@ func _ready() -> void:
 	await _wait(2.0)
 	await _shot("03_in_irons")
 
-	# Seekarte oeffnen.
+	# Seekarte oeffnen. Vorher jeder Nation ein anderes Verhaeltnis geben:
+	# Sonst stuenden in der Legende viermal dieselben Worte in derselben Farbe,
+	# und die Aufnahme wuerde nicht zeigen, ob die Stufen ueberhaupt greifen.
+	GameState.change_reputation(GameState.Nation.SPAIN, -80)
+	GameState.change_reputation(GameState.Nation.ENGLAND, -30)
+	GameState.change_reputation(GameState.Nation.FRANCE, 45)
+	# Und einen Kaperbrief dazu - er steht nur bei einer Nation und waere sonst
+	# auf keiner Aufnahme zu sehen.
+	GameState.letter_nation = GameState.Nation.FRANCE
+	# Dazu ein laufender Auftrag: Die Zeile ueber der Karibik ist der einzige
+	# Ort, an dem eine Frist sichtbar herunterzaehlt. Das Gerede aus der
+	# Schenke gleich mit - ohne das fehlt der Aufnahme das Revier, und ob der
+	# Ortsname noch in die Zeile passt, sieht man nur im Bild.
+	GameState.accept_commission(GameState.Nation.FRANCE)
+	GameState.hear_commission_rumour()
 	var map: Control = mode.get_node("WorldMap")
 	map.toggle()
 	await _wait(1.0)

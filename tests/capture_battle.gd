@@ -95,7 +95,87 @@ func _ready() -> void:
 	await _wait(2.0)
 	await _shot("08_prise")
 
+	# Und ausgeraeumt, mit einem Kaperbrief einer anderen Krone in der Tasche:
+	# Der Auftraggeber steht dann in derselben Meldezeile wie die Beute. Der
+	# Brief wird hier erst ausgestellt, damit die Aufnahmen davor die gewohnten
+	# Verhaeltnisse zeigen.
+	GameState.issue_letter(_patron_against(_enemy.nation_id))
+	_combat.take_prize(_enemy)
+	await _wait(0.8)
+	await _shot("09_prise_gutgeschrieben")
+
+	# Zum Schluss ein benannter Gegner. Zwei Dinge sind nur hier zu sehen: die
+	# Silhouette der Fregatte, die es vorher nicht gab, und die Zielzeile mit
+	# einem Kapitaensnamen darin - die Wiedererkennung, auf der Auftrag und
+	# Kopfgeld beruhen.
+	# Spanien erst feindlich machen: Ein Kopfgeldjaeger faehrt nur fuer eine
+	# Krone aus, die einen sucht. Ohne das stuende in der Zielzeile
+	# "Gleichgueltig", waehrend die Meldung darunter "Spanien sucht dich" sagt -
+	# ein Bild, das sich selbst widerspricht.
+	while GameState.standing_with(GameState.Nation.SPAIN) != Standing.Level.HOSTILE:
+		GameState.change_reputation(GameState.Nation.SPAIN, -10)
+	GameState.add_notoriety(Bounty.FEARED_FROM)
+
+	# Naeher heran als das uebrige Gefecht: Die Fregatte ist die erste Klasse mit
+	# einer eigenen Silhouette, und auf 180 Metern ist davon nichts zu erkennen.
+	var hunter := _summon_named(120.0)
+	print("  Kopfgeldjaeger: %s (%s)" % [hunter.captain_name, hunter.ship_class.display_name])
+	# Ab hier ist er der Gegner, ueber den die Aufnahmezeile berichtet.
+	_enemy = hunter
+	EventBus.named_captain_sighted.emit(
+		hunter.captain_name, hunter.ship_name, hunter.nation_id, true
+	)
+	await _wait(1.2)
+	await _shot("10_kopfgeldjaeger")
+
 	get_tree().quit(0)
+
+
+## Ein benannter Gegner auf einer Fregatte, querab.
+##
+## Ueber [Bounty] und nicht von Hand zusammengesetzt: Die Aufnahme soll zeigen,
+## was das Spiel wirklich schickt, nicht was die Sichtpruefung sich ausdenkt.
+func _summon_named(distance: float) -> Ship:
+	var rng := RandomNumberGenerator.new()
+	rng.seed = WorldData.world_seed
+	var who := Bounty.hunter(
+		rng, WorldData.get_nation(GameState.Nation.SPAIN), Bounty.FEARED_FROM
+	)
+
+	var packed: PackedScene = load("res://entities/ship/ship.tscn")
+	var enemy: Ship = packed.instantiate()
+	enemy.player_controlled = false
+	_combat.add_child(enemy)
+	enemy.apply_class(load(who.ship_class_path))
+	enemy.ship_name = who.ship_name
+	enemy.captain_name = who.captain_name
+	enemy.nation_id = who.nation_id
+	enemy.global_position = _ship.global_position + Vector3(distance, 0.0, 0.0)
+	enemy.set_heading(0.0)
+	_combat.adopt(enemy)
+	# Wie bei jedem gestellten Gegner: Der Kapitaen wuerde losfahren, das Schiff
+	# soll aber stehen bleiben, wo es hingestellt wurde.
+	#
+	# set_physics_process(false) gehoert dazu und queue_free() allein reicht
+	# nicht: Freigegeben wird erst am Bildende, und ein feindlicher Kapitaen
+	# entscheidet im ersten Takt danach noch einmal. Die Fregatte hat in genau
+	# dieser Luecke eine volle Breitseite abgegeben, und die Aufnahme zeigte
+	# statt ihrer Silhouette den eigenen Pulverdampf.
+	var captain := enemy.get_node_or_null("Kapitaen")
+	if captain != null:
+		captain.set_physics_process(false)
+		captain.queue_free()
+	return enemy
+
+
+## Die Krone, deren Brief eine Prise gegen diese Flagge deckt.
+##
+## Seit es Kriege gibt ([Diplomacy]), ist das nicht mehr irgendeine fremde:
+## Gedeckt ist genau der Kriegsgegner. Mit einer beliebigen Krone haette die
+## Aufnahme je nach Seed die Gutschrift gezeigt oder nicht.
+func _patron_against(nation_id: int) -> int:
+	var patron := WorldData.enemy_of(nation_id)
+	return patron if patron >= 0 else GameState.Nation.ENGLAND
 
 
 ## Setzt ein fremdes Segel in eine bestimmte Entfernung querab.
@@ -111,9 +191,12 @@ func _summon(distance: float) -> Ship:
 	enemy.set_heading(0.0)
 	_combat.adopt(enemy)
 	# Der Kapitaen wuerde sofort fliehen - fuer eine Aufnahme soll das Schiff
-	# stehen bleiben, wo es hingestellt wurde.
+	# stehen bleiben, wo es hingestellt wurde. Erst stilllegen, dann freigeben:
+	# queue_free() wirkt erst am Bildende, und ein Takt reicht fuer eine
+	# Entscheidung (siehe _summon_named).
 	var captain := enemy.get_node_or_null("Kapitaen")
 	if captain != null:
+		captain.set_physics_process(false)
 		captain.queue_free()
 	return enemy
 
@@ -149,8 +232,19 @@ func _shot(shot_name: String) -> void:
 	var image := get_viewport().get_texture().get_image()
 	var path := "%s/%s.png" % [OUT_DIR, shot_name]
 	var error := image.save_png(path)
-	var distance := _ship.plan_position().distance_to(_enemy.plan_position()) if _enemy != null else 0.0
+	# is_instance_valid und nicht "!= null": Eine ausgeraeumte Prise treibt zwei
+	# Sekunden lang davon und wird dann freigegeben - die Variable zeigt danach
+	# weiter auf sie, und jeder Zugriff bricht die Aufnahme ab. Genau das ist
+	# passiert, als hinter der Prise noch eine Aufnahme dazukam.
+	var shown: Ship = _enemy if is_instance_valid(_enemy) else null
+	if shown == null:
+		print("  %-18s  kein Gegner   Salve %-14s [%s]" % [
+			shot_name, _last_salvo, "ok" if error == OK else "FEHLER %d" % error,
+		])
+		return
 	print("  %-18s  %5.0f m   Gegner Rumpf %3d Segel %3d   Salve %-14s [%s]" % [
-		shot_name, distance, _enemy.hull, _enemy.sails, _last_salvo,
+		shot_name,
+		_ship.plan_position().distance_to(shown.plan_position()),
+		shown.hull, shown.sails, _last_salvo,
 		"ok" if error == OK else "FEHLER %d" % error,
 	])

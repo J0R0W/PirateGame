@@ -79,6 +79,13 @@ var sail_command: int = 3
 # --- Zustand ---------------------------------------------------------------
 var ship_class: ShipClass = null
 var ship_name: String = "Namenlos"
+## Wer es fuehrt - aber nur bei benannten Gegnern (siehe [Adversary]). Leer
+## heisst: irgendein Kapitaen, wie bei jedem zufaellig gesetzten Segel.
+##
+## Steht hier und nicht in einem eigenen Node am Schiff, weil es die einzige
+## Auskunft ist, ueber die ein Auftrag sein Ziel wiedererkennt - und die muss
+## jeder haben, der das Schiff in der Hand hat.
+var captain_name: String = ""
 ## Nation dieses Schiffs, -1 fuer Piraten und den Spieler.
 var nation_id: int = -1
 ## Kriegsschiffe suchen das Gefecht, Handelsschiffe fliehen davor.

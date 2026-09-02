@@ -39,8 +39,16 @@ func _ready() -> void:
 	_check_ship_ai()
 	_check_ship_combat()
 	_check_prize()
+	_check_diplomacy()
+	_check_standing()
+	await _check_standing_at_sea()
+	_check_letter_of_marque()
+	_check_letter_at_sea()
+	_check_commission()
+	_check_commission_at_sea()
+	_check_bounty()
 	await _check_boarding()
-	_check_hiring()
+	_check_tavern()
 	await _check_debug_knobs()
 	await _check_duel()
 	await _check_terrain()
@@ -117,6 +125,12 @@ func _check_determinism() -> void:
 func _check_save_roundtrip() -> void:
 	GameState.new_campaign("Blackbeard", 4242)
 	GameState.add_gold(1234)
+	# Der Kaperbrief zuerst: Ihn anzunehmen kostet bei den uebrigen Kronen
+	# Ansehen, und die Zeile darunter prueft einen genauen Wert bei England.
+	GameState.issue_letter(GameState.Nation.ENGLAND)
+	GameState.letter_prizes = 3
+	GameState.accept_commission(GameState.Nation.ENGLAND)
+	GameState.commissions_done = 2
 	GameState.change_reputation(GameState.Nation.ENGLAND, -40)
 	GameState.add_notoriety(17)
 	GameState.damage_hull(23)
@@ -129,6 +143,10 @@ func _check_save_roundtrip() -> void:
 	var plundered: TownData = WorldData.towns[0]
 	plundered.stock[&"tobacco"] = 3.0
 	plundered.discovered = true
+
+	GameState.hear_commission_rumour()
+	var ordered := GameState.commission.target.captain_name
+	var ordered_waters := GameState.commission.waters_town_id
 
 	_assert(SaveManager.save_slot(99), "Spielstand geschrieben")
 	_assert(SaveManager.has_save(99), "Spielstand gefunden")
@@ -149,6 +167,27 @@ func _check_save_roundtrip() -> void:
 	_assert(is_equal_approx(WorldData.towns[0].stock_of(&"tobacco"), 3.0),
 		"Lagerbestand der Stadt wiederhergestellt")
 	_assert(WorldData.towns[0].discovered, "Besuchte Stadt bleibt bekannt")
+	_assert(GameState.letter_nation == GameState.Nation.ENGLAND, "Kaperbrief wiederhergestellt")
+	_assert(GameState.letter_prizes == 3, "Und die Prisen darunter mitgezaehlt")
+	_assert(GameState.commission != null, "Der Auftrag des Gouverneurs wiederhergestellt")
+	_assert(GameState.commission.target.captain_name == ordered,
+		"Mitsamt dem Mann, den er sehen will")
+	_assert(GameState.commission.patron_id == GameState.Nation.ENGLAND,
+		"Und der Krone, die ihn vergeben hat")
+	_assert(GameState.commission.waters_town_id == ordered_waters,
+		"Samt dem Revier, in dem der Gesuchte kreuzt")
+	_assert(GameState.commission.waters_known,
+		"Und dem, was der Wirt darueber schon erzaehlt hat")
+	_assert(GameState.commissions_done == 2, "Die eingeloesten Auftraege mitgezaehlt")
+
+	# Die Anhebung alter Spielstaende laeuft seit dem Kaperbrief ueber mehrere
+	# Schritte. Vorher gab es genau einen Sonderfall und ein return darin -
+	# ein Spielstand der Version 1 haette den zweiten Schritt nie gesehen.
+	var ancient: Dictionary = SaveManager._migrate({"version": 1, "player": {}})
+	_assert(int(ancient.get("version", 0)) == SaveManager.SAVE_VERSION,
+		"Ein Spielstand der Version 1 wird bis ganz nach oben gehoben")
+	_assert(ancient.has("ship"),
+		"Und bekommt dabei den Schiffsabschnitt, den seine Version noch nicht kannte")
 
 	GameState.current_port_id = -1
 	SaveManager.delete_slot(99)
@@ -1363,6 +1402,819 @@ func _make_ship(class_path: String) -> Ship:
 
 
 
+## Der Ruf und seine Folgen - M6.
+##
+## Bis M6 wurde Ansehen gefuehrt und von niemandem gelesen: Jede Patrouille
+## griff jeden an, jeder Hafen stand jedem offen. Auch NationData.aggression
+## und reputation_sensitivity standen seit M2 ungenutzt in den .tres-Dateien.
+func _check_standing() -> void:
+	GameState.new_campaign("Freibeuter", 20260831)
+
+	# Die Skala ist geordnet: Wer vergleicht, verlaesst sich darauf.
+	_assert(Standing.level_of(100) == Standing.Level.ALLIED, "Voller Ruf heisst verbuendet")
+	_assert(Standing.level_of(0) == Standing.Level.NEUTRAL, "Wer nichts getan hat, ist gleichgueltig")
+	_assert(Standing.level_of(-100) == Standing.Level.HOSTILE, "Ganz unten ist es Feindschaft")
+	_assert(Standing.Level.ALLIED < Standing.Level.HOSTILE,
+		"Die Aufzaehlung laeuft von gut nach schlecht")
+	var previous := Standing.level_of(100)
+	for value in [60, 20, -15, -45, -100]:
+		var here := Standing.level_of(value)
+		_assert(here >= previous, "Weniger Ansehen heisst nie ein besseres Verhaeltnis (%d)" % value)
+		previous = here
+
+	# Der Hafen macht erst ganz unten zu, nicht schon beim Misstrauen: Sonst
+	# faellt der Spieler nach zwei Prisen aus dem halben Spiel heraus.
+	_assert(Standing.port_open(Standing.Level.NEUTRAL), "Ein gleichgueltiger Hafen steht offen")
+	_assert(Standing.port_open(Standing.Level.SUSPECT),
+		"Ein misstrauischer laesst dich noch herein - sonst waere die Skala unsichtbar")
+	_assert(not Standing.port_open(Standing.Level.HOSTILE), "Ein feindlicher nicht mehr")
+
+	# Jagen: Feindschaft immer, Misstrauen nur bei einer Nation, die schnell
+	# zur Sache kommt. Genau dafuer gibt es NationData.aggression.
+	_assert(not Standing.hunts_player(Standing.Level.NEUTRAL, 1.0),
+		"Wem man nichts getan hat, der jagt nicht - auch keine aggressive Nation")
+	_assert(not Standing.hunts_player(Standing.Level.FRIENDLY, 1.0),
+		"Eine wohlgesonnene erst recht nicht")
+	_assert(Standing.hunts_player(Standing.Level.HOSTILE, 0.0),
+		"Wer feindlich steht, jagt in jedem Fall")
+	_assert(Standing.hunts_player(Standing.Level.SUSPECT, 0.7),
+		"Beim Misstrauen jagt die aggressive Nation")
+	_assert(not Standing.hunts_player(Standing.Level.SUSPECT, 0.4),
+		"Die zurueckhaltende noch nicht")
+
+	# Und die Empfindlichkeit gewichtet wirklich.
+	_assert(Standing.weighted_change(-10, 1.2) < Standing.weighted_change(-10, 0.8),
+		"Eine empfindliche Nation nimmt dieselbe Tat schwerer")
+	_assert(Standing.weighted_change(-1, 0.1) == -1,
+		"Eine kleine Tat faellt nie auf null - sonst waere sie wirkungslos")
+	_assert(Standing.weighted_change(0, 2.0) == 0, "Nichts bleibt nichts")
+
+	# Und das Ganze durch GameState, mit den echten Nationsdaten: Spanien ist
+	# empfindlicher als die Niederlande, also kostet dieselbe Prise dort mehr.
+	var spain := WorldData.get_nation(GameState.Nation.SPAIN)
+	var dutch := WorldData.get_nation(GameState.Nation.NETHERLANDS)
+	if spain != null and dutch != null:
+		_assert(spain.reputation_sensitivity > dutch.reputation_sensitivity,
+			"Spanien nimmt Taten schwerer als die Niederlande (%.1f gegen %.1f)"
+			% [spain.reputation_sensitivity, dutch.reputation_sensitivity])
+		GameState.change_reputation(GameState.Nation.SPAIN, -10)
+		GameState.change_reputation(GameState.Nation.NETHERLANDS, -10)
+		_assert(GameState.reputation_with(GameState.Nation.SPAIN)
+				< GameState.reputation_with(GameState.Nation.NETHERLANDS),
+			"Dieselbe Tat kostet bei Spanien mehr (%d gegen %d)"
+			% [GameState.reputation_with(GameState.Nation.SPAIN),
+				GameState.reputation_with(GameState.Nation.NETHERLANDS)])
+
+	# Ein frischer Kapitaen wird von niemandem gejagt. Das war bis M6 anders:
+	# Die erste spanische Patrouille schoss ohne jeden Grund.
+	GameState.new_campaign("Neuling", 20260831)
+	var peaceful := true
+	for nation_id: int in [0, 1, 2, 3]:
+		var data := WorldData.get_nation(nation_id)
+		if data != null and Standing.hunts_player(
+			GameState.standing_with(nation_id), data.aggression
+		):
+			peaceful = false
+	_assert(peaceful, "Zu Beginn jagt keine Nation den Spieler")
+
+	# Wer genug pluendert, wird gejagt und ausgesperrt.
+	for i in 12:
+		GameState.change_reputation(GameState.Nation.SPAIN, -8)
+	var level := GameState.standing_with(GameState.Nation.SPAIN)
+	_assert(level == Standing.Level.HOSTILE,
+		"Genug Prisen machen eine Nation feindlich (Ansehen %d)"
+		% GameState.reputation_with(GameState.Nation.SPAIN))
+	_assert(not Standing.port_open(level), "Und dann bleibt ihr Hafen zu")
+	_assert(Standing.hunts_player(level, 0.0), "Und ihre Patrouillen jagen")
+	_assert(GameState.standing_with(GameState.Nation.FRANCE) == Standing.Level.NEUTRAL,
+		"Frankreich stoert das nicht - der Ruf ist je Nation getrennt")
+
+
+## Und dasselbe durch die Szene gefahren (Regel C6): M6 ist erst wahr, wenn
+## eine Tat auf See wirklich etwas aendert.
+func _check_standing_at_sea() -> void:
+	GameState.new_campaign("Beobachter", 20260901)
+
+	var combat := NavalCombat.new()
+	combat.max_ships = 0
+	add_child(combat)
+
+	var mine := _make_ship("res://resources/ships/sloop.tres")
+	mine.global_position = Vector3.ZERO
+	combat.setup(mine)
+
+	var patrol := _make_ship("res://resources/ships/patrol_sloop.tres")
+	patrol.ship_name = "Wachschiff"
+	patrol.nation_id = GameState.Nation.SPAIN
+	patrol.warship = true
+	patrol.global_position = Vector3(200.0, 0.0, 0.0)
+	combat.adopt(patrol)
+	await get_tree().physics_frame
+
+	var captain := patrol.get_node_or_null("Kapitaen") as ShipAI
+	_assert(captain != null, "Das Wachschiff hat einen Kapitaen")
+	if captain == null:
+		combat.queue_free()
+		mine.queue_free()
+		return
+
+	_assert(not combat.hunts_player(patrol),
+		"Eine Patrouille laesst einen unbescholtenen Kapitaen in Ruhe")
+	_assert(not captain.hostile,
+		"Und ihr Kapitaen sucht kein Gefecht - bis M6 tat er es immer")
+	_assert(not captain.wants_battle(),
+		"Weder aus Feindschaft noch aus Provokation")
+	_assert(ShipAI.stance(false, 1.0, 100.0) == ShipAI.Stance.FLEE,
+		"Wer keinen Streit sucht, geht auch nicht auf Gefechtskurs")
+
+	# Genug spanische Prisen, und dieselbe Patrouille wird zum Verfolger.
+	while GameState.standing_with(GameState.Nation.SPAIN) != Standing.Level.HOSTILE:
+		GameState.change_reputation(GameState.Nation.SPAIN, -10)
+	await get_tree().physics_frame
+
+	_assert(combat.hunts_player(patrol),
+		"Nach genug Prisen jagt dieselbe Patrouille")
+	_assert(captain.hostile, "Und ihr Kapitaen sucht jetzt das Gefecht")
+	_assert(captain.target == mine, "Er hat den Spieler im Blick")
+
+	# Ein Handelsschiff derselben Nation flieht trotzdem - es kaempft nicht,
+	# nur weil seine Krone den Spieler sucht.
+	var trader := _make_ship("res://resources/ships/merchant_brig.tres")
+	trader.nation_id = GameState.Nation.SPAIN
+	trader.warship = false
+	trader.global_position = Vector3(0.0, 0.0, 200.0)
+	combat.adopt(trader)
+	await get_tree().physics_frame
+	_assert(not combat.hunts_player(trader),
+		"Ein Handelsschiff jagt niemanden, auch nicht fuer seine Krone")
+
+	# Und Frankreich bleibt davon unberuehrt.
+	var french := _make_ship("res://resources/ships/patrol_sloop.tres")
+	french.nation_id = GameState.Nation.FRANCE
+	french.warship = true
+	french.global_position = Vector3(-200.0, 0.0, 0.0)
+	combat.adopt(french)
+	await get_tree().physics_frame
+	_assert(not combat.hunts_player(french),
+		"Eine franzoesische Patrouille stoert sich nicht an spanischen Prisen")
+
+	combat.queue_free()
+	mine.queue_free()
+
+
+## Der Kaperbrief - die Gegenrichtung auf der Ansehensskala.
+##
+## Bis hierher konnte man Ruf nur verlieren: Jede Prise kostete Ansehen bei der
+## bestohlenen Krone, und nichts brachte je welches ein. Damit war die Skala ein
+## Verfall. Der Brief macht eine Entscheidung daraus.
+func _check_letter_of_marque() -> void:
+	# Wo einer sitzt. Ein Dorf hat keinen Gouverneur - der erste Grund im Spiel,
+	# eine groessere Stadt anzulaufen, der nichts mit Preisen zu tun hat.
+	_assert(not LetterOfMarque.has_seat(0), "In einem Dorf sitzt kein Gouverneur")
+	_assert(LetterOfMarque.has_seat(1), "In einer Stadt schon")
+	_assert(LetterOfMarque.has_seat(2), "In einer Hauptstadt erst recht")
+
+	# Ausgestellt wird ab gleichgueltig. Zu Beginn steht der Spieler bei allen
+	# vier Kronen auf null - ein Brief, den man sich erst verdienen muss, waere
+	# kein Einstieg in das System, sondern ein Preis dafuer, es schon zu kennen.
+	_assert(LetterOfMarque.can_issue(Standing.Level.NEUTRAL),
+		"Eine gleichgueltige Krone stellt einen Brief aus")
+	_assert(LetterOfMarque.can_issue(Standing.Level.ALLIED), "Eine verbuendete erst recht")
+	_assert(not LetterOfMarque.can_issue(Standing.Level.SUSPECT),
+		"Eine misstrauische nicht mehr - dafuer gibt es die Stufe")
+	_assert(not LetterOfMarque.can_issue(Standing.Level.HOSTILE), "Eine feindliche schon gar nicht")
+
+	# Was der Brief deckt: die Krone, mit der der Patron Krieg fuehrt - und die
+	# allein. Bis M6 war es alles ausser der eigenen Flagge; ein Brief, der
+	# jede fremde Prise gutschreibt, ist aber ein Freibrief und keine Wahl.
+	_assert(LetterOfMarque.covers(
+			GameState.Nation.ENGLAND, GameState.Nation.SPAIN, GameState.Nation.SPAIN),
+		"Ein englischer Brief deckt eine spanische Prise, wenn England mit Spanien Krieg fuehrt")
+	_assert(not LetterOfMarque.covers(
+			GameState.Nation.ENGLAND, GameState.Nation.FRANCE, GameState.Nation.SPAIN),
+		"Eine franzoesische deckt er dann nicht - mit Frankreich ist Frieden")
+	_assert(not LetterOfMarque.covers(
+			GameState.Nation.ENGLAND, GameState.Nation.ENGLAND, GameState.Nation.ENGLAND),
+		"Den eigenen Auftraggeber deckt er nie")
+	_assert(not LetterOfMarque.covers(
+			LetterOfMarque.NONE, GameState.Nation.SPAIN, GameState.Nation.SPAIN),
+		"Ohne Brief ist keine Prise gedeckt")
+	_assert(LetterOfMarque.is_betrayal(GameState.Nation.ENGLAND, GameState.Nation.ENGLAND),
+		"Das Segel des eigenen Auftraggebers aufzubringen ist Verrat")
+	_assert(not LetterOfMarque.is_betrayal(LetterOfMarque.NONE, GameState.Nation.ENGLAND),
+		"Ohne Brief gibt es niemanden zu verraten")
+
+	# Und dasselbe durch GameState, mit den echten Nationsdaten.
+	GameState.new_campaign("Freibeuter", 20260902)
+	_assert(not GameState.has_letter(), "Eine neue Kampagne faengt ohne Brief an")
+	_assert(GameState.settle_letter_prize(GameState.Nation.SPAIN) == LetterOfMarque.Verdict.NONE,
+		"Ohne Brief bringt eine Prise niemandem etwas ein")
+
+	var spain_before := GameState.reputation_with(GameState.Nation.SPAIN)
+	_assert(GameState.issue_letter(GameState.Nation.ENGLAND), "England stellt einen Brief aus")
+	_assert(GameState.letter_nation == GameState.Nation.ENGLAND, "Und er steckt in der Tasche")
+	_assert(GameState.reputation_with(GameState.Nation.ENGLAND) == 0,
+		"Der Patron schenkt dafuer nichts - ein Brief ist ein Auftrag, keine Gunst")
+	_assert(GameState.reputation_with(GameState.Nation.SPAIN) < spain_before,
+		"Die uebrigen Kronen erfahren davon (Spanien steht bei %d)"
+		% GameState.reputation_with(GameState.Nation.SPAIN))
+	_assert(not GameState.issue_letter(GameState.Nation.ENGLAND),
+		"Denselben Brief gibt es nicht zweimal")
+
+	# Eine gedeckte Prise: Der Patron schreibt gut, der Bestohlene bucht ab.
+	# Gedeckt ist, mit wem England gerade Krieg fuehrt - welche Krone das ist,
+	# haengt am Seed und darf hier nicht angenommen werden.
+	var foe := WorldData.enemy_of(GameState.Nation.ENGLAND)
+	_assert(foe >= 0 and foe != GameState.Nation.ENGLAND,
+		"England fuehrt mit irgendeiner Krone Krieg")
+	var neutral := -1
+	for nation: NationData in WorldData.nations:
+		if nation.id != GameState.Nation.ENGLAND and nation.id != foe:
+			neutral = nation.id
+			break
+	_assert(GameState.settle_letter_prize(neutral) == LetterOfMarque.Verdict.NONE,
+		"Eine Prise gegen eine Krone im Frieden bringt dem Patron nichts")
+	_assert(GameState.letter_prizes == 0, "Und zaehlt auch nicht mit")
+
+	var patron_before := GameState.reputation_with(GameState.Nation.ENGLAND)
+	_assert(GameState.settle_letter_prize(foe) == LetterOfMarque.Verdict.CREDITED,
+		"Eine Prise gegen den Kriegsgegner faellt unter den Brief")
+	_assert(GameState.reputation_with(GameState.Nation.ENGLAND) > patron_before,
+		"England schreibt sie gut - die einzige Richtung, in der Ansehen steigt")
+	_assert(GameState.letter_prizes == 1, "Der Brief zaehlt seine Prisen mit")
+	_assert(LetterOfMarque.PRIZE_REWARD < -NavalCombat.PRIZE_REPUTATION,
+		"Der Patron schreibt weniger gut, als dieselbe Prise den Bestohlenen kostet")
+
+	# Der eigene Auftraggeber ist tabu.
+	var patron_now := GameState.reputation_with(GameState.Nation.ENGLAND)
+	_assert(GameState.settle_letter_prize(GameState.Nation.ENGLAND)
+			== LetterOfMarque.Verdict.REVOKED,
+		"Wer den eigenen Auftraggeber aufbringt, verliert den Brief")
+	_assert(not GameState.has_letter(), "Und faehrt danach fuer niemanden")
+	_assert(GameState.reputation_with(GameState.Nation.ENGLAND) < patron_now,
+		"England nimmt es zusaetzlich uebel")
+
+	# Seitenwechsel: Der bisherige Patron ist ab dem Moment eine der uebrigen
+	# Kronen und bucht denselben Verlust wie sie. Dafuer braucht es keine
+	# eigene Regel - der Wechsel kostet trotzdem mehr als der erste Brief.
+	GameState.new_campaign("Wechsler", 20260902)
+	_assert(GameState.issue_letter(GameState.Nation.FRANCE), "Frankreich stellt einen Brief aus")
+	var france_before := GameState.reputation_with(GameState.Nation.FRANCE)
+	_assert(GameState.issue_letter(GameState.Nation.NETHERLANDS),
+		"Und die Niederlande stellen auch einen aus")
+	_assert(GameState.letter_nation == GameState.Nation.NETHERLANDS,
+		"Der neue ersetzt den alten - es gibt immer nur einen")
+	_assert(GameState.reputation_with(GameState.Nation.FRANCE) < france_before,
+		"Frankreich rechnet den Wechsel an")
+
+	# Zurueckgeben kostet nichts, macht aber auch nichts rueckgaengig.
+	var dutch_before := GameState.reputation_with(GameState.Nation.NETHERLANDS)
+	GameState.letter_prizes = 4
+	GameState.return_letter()
+	_assert(not GameState.has_letter(), "Ein zurueckgegebener Brief ist weg")
+	_assert(GameState.letter_prizes == 0, "Und seine Zaehlung mit ihm")
+	_assert(GameState.reputation_with(GameState.Nation.NETHERLANDS) == dutch_before,
+		"Einen Auftrag niederzulegen schadet niemandem und kostet darum nichts")
+
+	# Wer sich unbeliebt gemacht hat, bekommt keinen mehr.
+	for i in 8:
+		if GameState.standing_with(GameState.Nation.SPAIN) == Standing.Level.SUSPECT:
+			break
+		GameState.change_reputation(GameState.Nation.SPAIN, -5)
+	_assert(GameState.standing_with(GameState.Nation.SPAIN) == Standing.Level.SUSPECT,
+		"Genug spanische Prisen machen Spanien misstrauisch")
+	_assert(not GameState.can_issue_letter(GameState.Nation.SPAIN),
+		"Eine misstrauische Krone gibt keinen Auftrag mehr")
+	_assert(not GameState.issue_letter(GameState.Nation.SPAIN),
+		"Und der Griff danach geht ins Leere")
+
+
+## Wer mit wem Krieg fuehrt.
+##
+## Die Lage ist eine reine Rechnung aus Seed und Spieltag, also laesst sie sich
+## hier vollstaendig durchgehen, ohne dass eine Szene laufen muesste.
+func _check_diplomacy() -> void:
+	# Die Paarungstabelle. Von Hand geschrieben und darum genau die Sorte
+	# Tabelle, die man verdreht: Jede Zeile muss ihre eigene Umkehrung sein.
+	_assert(Diplomacy.PAIRINGS.size() == 3,
+		"Vier Kronen lassen sich auf genau drei Arten paaren")
+	for index in Diplomacy.PAIRINGS.size():
+		var row: Array = Diplomacy.PAIRINGS[index]
+		_assert(row.size() == 4, "Lage %d nennt alle vier Kronen" % index)
+		var enemies := {}
+		for id in row.size():
+			var foe := int(row[id])
+			_assert(foe != id, "Niemand liegt mit sich selbst im Krieg (Lage %d)" % index)
+			_assert(int(row[foe]) == id, "Feindschaft ist gegenseitig (Lage %d)" % index)
+			enemies[foe] = true
+		_assert(enemies.size() == 4,
+			"Und jede Krone hat genau einen Feind (Lage %d)" % index)
+
+	# Jede Umwaelzung gibt jeder Krone einen anderen Feind. Sonst waere eine
+	# Neuordnung fuer manche Spieler ein Ereignis ohne Folgen.
+	for id in 4:
+		var seen_foes := {}
+		for index in Diplomacy.PAIRINGS.size():
+			seen_foes[int(Diplomacy.PAIRINGS[index][id])] = true
+		_assert(seen_foes.size() == Diplomacy.PAIRINGS.size(),
+			"In jeder Lage hat Krone %d einen anderen Feind" % id)
+
+	# Der Kalender.
+	_assert(Diplomacy.era_of(0) == 0, "Der erste Tag liegt im ersten Abschnitt")
+	_assert(Diplomacy.era_of(Diplomacy.ERA_DAYS - 1) == 0, "Der letzte auch noch")
+	_assert(Diplomacy.era_of(Diplomacy.ERA_DAYS) == 1, "Der Tag danach nicht mehr")
+	_assert(Diplomacy.era_start(Diplomacy.ERA_DAYS + 3) == Diplomacy.ERA_DAYS,
+		"Und der Abschnitt faengt an, wo er anfaengt")
+	_assert(Diplomacy.days_left(0) == Diplomacy.ERA_DAYS, "Am ersten Tag steht alles noch aus")
+	_assert(Diplomacy.days_left(Diplomacy.ERA_DAYS - 1) == 1, "Am letzten bleibt einer")
+	_assert(Diplomacy.ERA_DAYS > Commission.DAYS * 2,
+		"Ein Krieg ueberdauert die Frist eines Auftrags deutlich (%d gegen %d Tage)"
+		% [Diplomacy.ERA_DAYS, Commission.DAYS])
+
+	# Innerhalb eines Abschnitts steht die Lage, danach ist sie eine andere.
+	var probe_seed := 4242
+	var last := Diplomacy.ERA_DAYS - 1
+	_assert(Diplomacy.enemy_of(probe_seed, 0, GameState.Nation.SPAIN)
+			== Diplomacy.enemy_of(probe_seed, last, GameState.Nation.SPAIN),
+		"Innerhalb eines Abschnitts bleibt der Gegner derselbe")
+	_assert(Diplomacy.enemy_of(probe_seed, last, GameState.Nation.SPAIN)
+			!= Diplomacy.enemy_of(probe_seed, last + 1, GameState.Nation.SPAIN),
+		"Beim Wechsel nicht")
+	for era in 10:
+		_assert(Diplomacy.pairing_index(probe_seed, era)
+				!= Diplomacy.pairing_index(probe_seed, era + 1),
+			"Eine Neuordnung aendert wirklich etwas (Abschnitt %d)" % era)
+
+	var starts_differently := false
+	for other_seed in [1, 2, 3, 4, 5, 6, 7]:
+		if Diplomacy.pairing_index(other_seed, 0) != Diplomacy.pairing_index(probe_seed, 0):
+			starts_differently = true
+			break
+	_assert(starts_differently, "Ein anderer Seed faengt mit einer anderen Lage an")
+
+	var wars := Diplomacy.wars(probe_seed, 0)
+	_assert(wars.size() == 2, "Es laufen immer genau zwei Kriege")
+	for war: Vector2i in wars:
+		_assert(war.x < war.y, "Jeder steht einmal da, mit der kleineren Flagge vorn")
+		_assert(Diplomacy.at_war(probe_seed, 0, war.x, war.y), "Und er ist wirklich einer")
+		_assert(Diplomacy.at_war(probe_seed, 0, war.y, war.x), "In beide Richtungen")
+	_assert(not Diplomacy.at_war(probe_seed, 0, 0, 0), "Mit sich selbst fuehrt niemand Krieg")
+	_assert(Diplomacy.enemy_of(probe_seed, 0, -1) == -1, "Eine unbekannte Flagge hat keinen Feind")
+	_assert(Diplomacy.enemy_of(probe_seed, 0, 9) == -1, "Und eine erfundene auch nicht")
+
+	# Und dasselbe durch WorldData, mit den echten Nationsdaten.
+	GameState.new_campaign("Diplomat", 20260911)
+	var patron := GameState.Nation.ENGLAND
+	var foe := WorldData.enemy_of(patron)
+	_assert(foe >= 0 and foe != patron, "England fuehrt mit einer Krone Krieg")
+	_assert(WorldData.at_war(patron, foe), "Und zwar wirklich")
+	_assert(WorldData.at_war(foe, patron), "Beidseitig")
+	_assert(WorldData.wars().size() == 2, "Zwei Kriege in der Welt")
+
+	_assert(GameState.issue_letter(patron), "England stellt einen Brief aus")
+	_assert(GameState.letter_covers(foe), "Der Brief deckt Prisen gegen den Kriegsgegner")
+	for nation: NationData in WorldData.nations:
+		if nation.id == foe:
+			continue
+		_assert(not GameState.letter_covers(nation.id),
+			"Und gegen keine andere Flagge (%s)" % nation.display_name)
+
+	# Die Meldung: nur am Tag der Neuordnung, und nur einmal.
+	var heard := [0]
+	var listener := func(_day: int) -> void: heard[0] += 1
+	EventBus.treaties_changed.connect(listener)
+	GameState.game_minutes = 0.0
+	WorldData.reset_political_clock()
+	WorldData._on_day_passed(1)
+	_assert(heard[0] == 0, "Ein gewoehnlicher Tageswechsel meldet nichts")
+	WorldData._on_day_passed(Diplomacy.ERA_DAYS)
+	_assert(heard[0] == 1, "Der Tag, an dem die Kronen neu verhandeln, schon")
+	WorldData._on_day_passed(Diplomacy.ERA_DAYS + 1)
+	_assert(heard[0] == 1, "Und danach ist wieder Ruhe")
+	EventBus.treaties_changed.disconnect(listener)
+	WorldData.reset_political_clock()
+
+
+## Und dasselbe durch die Szene gefahren (Regel C6): Ein Kaperbrief ist erst
+## wahr, wenn eine wirklich genommene Prise beim Auftraggeber ankommt.
+func _check_letter_at_sea() -> void:
+	GameState.new_campaign("Kaperfahrer", 20260903)
+	_assert(GameState.issue_letter(GameState.Nation.ENGLAND),
+		"Der Gouverneur stellt den Brief aus")
+
+	var combat := NavalCombat.new()
+	# Keine zufaelligen Segel dazwischen - ein drittes Schiff waehrend der
+	# Pruefung verschiebt Ruf und Laderaum.
+	combat.max_ships = 0
+	add_child(combat)
+
+	var mine := _make_ship("res://resources/ships/sloop.tres")
+	mine.global_position = Vector3.ZERO
+	combat.setup(mine)
+
+	# Unter der Flagge, mit der England gerade Krieg fuehrt - nur die faellt
+	# unter den Brief.
+	var foe := WorldData.enemy_of(GameState.Nation.ENGLAND)
+	var prey := _make_ship("res://resources/ships/merchant_brig.tres")
+	prey.ship_name = "Vom Kriegsgegner"
+	prey.nation_id = foe
+	prey.gold = 300
+	prey.global_position = Vector3(60.0, 0.0, 0.0)
+	combat.adopt(prey)
+	prey.strike()
+	_assert(combat.prize_in_reach() == prey, "Die Prise liegt laengsseit")
+
+	var england_before := GameState.reputation_with(GameState.Nation.ENGLAND)
+	var foe_before := GameState.reputation_with(foe)
+	combat.take_prize(prey)
+	_assert(GameState.reputation_with(GameState.Nation.ENGLAND) > england_before,
+		"England schreibt die Prise gut (%d statt %d)" % [
+			GameState.reputation_with(GameState.Nation.ENGLAND), england_before
+		])
+	_assert(GameState.reputation_with(foe) < foe_before,
+		"Der Bestohlene bucht sie ab")
+	_assert(GameState.letter_prizes == 1, "Und der Brief zaehlt sie mit")
+
+	# Und der Ueberfall auf den eigenen Auftraggeber kostet genau ihn.
+	var englishman := _make_ship("res://resources/ships/merchant_brig.tres")
+	englishman.ship_name = "Sea Hawk"
+	englishman.nation_id = GameState.Nation.ENGLAND
+	englishman.gold = 300
+	englishman.global_position = Vector3(60.0, 0.0, 0.0)
+	combat.adopt(englishman)
+	englishman.strike()
+	var patron_before := GameState.reputation_with(GameState.Nation.ENGLAND)
+	combat.take_prize(englishman)
+	_assert(not GameState.has_letter(),
+		"Wer den eigenen Auftraggeber aufbringt, faehrt danach fuer niemanden")
+	_assert(GameState.reputation_with(GameState.Nation.ENGLAND) < patron_before,
+		"Und England rechnet es doppelt an")
+
+	combat.queue_free()
+	mine.queue_free()
+
+
+## Der Auftrag des Gouverneurs - woran der Kaperbrief endlich haengt.
+##
+## Der Brief zaehlte seine Prisen mit, und die Zahl hing an nichts. Ein Auftrag
+## macht daraus eine Schleife, die an Land endet: aufbringen, zurueckfahren,
+## Bericht erstatten.
+func _check_commission() -> void:
+	# Was er einbringt, und auf welchem Schiff der Gesuchte faehrt.
+	_assert(Commission.reward_for(0) == Commission.REWARD_BASE,
+		"Der erste Auftrag bringt den Grundbetrag")
+	_assert(Commission.reward_for(3) > Commission.reward_for(0),
+		"Der Gouverneur traut einem mit jedem Bericht mehr zu")
+	_assert(Commission.reward_for(100) == Commission.REWARD_MAX,
+		"Aber nicht unbegrenzt - ein langer Lauf soll nicht in Gold ertrinken")
+	_assert(Commission.class_for(0) == Commission.PATROL_CLASS,
+		"Die ersten Ziele fahren eine Patrouillenschaluppe")
+	_assert(Commission.class_for(Commission.FRIGATE_FROM) == Commission.FRIGATE_CLASS,
+		"Spaeter schreibt er eine Fregatte aus")
+
+	var frigate: ShipClass = load(Commission.FRIGATE_CLASS)
+	var patrol: ShipClass = load(Commission.PATROL_CLASS)
+	_assert(frigate != null, "Die Fregatte ist ladbar")
+	_assert(frigate.warship, "Und sie ist ein Kriegsschiff")
+	_assert(frigate.cannon_slots > patrol.cannon_slots,
+		"Sie fuehrt mehr Rohre als eine Patrouille (%d gegen %d)"
+		% [frigate.cannon_slots, patrol.cannon_slots])
+	_assert(frigate.turn_rate_deg < patrol.turn_rate_deg,
+		"Und dreht dafuer traeger - sonst gaebe es keinen Weg an ihr vorbei")
+
+	# Der Steckbrief haengt am Wuerfel aus Seed, Krone und Zahl der
+	# eingeloesten Auftraege. Zweimal hinsehen heisst zweimal derselbe Mann.
+	# Wen der Gouverneur ausschreibt, entscheidet nicht mehr der Wuerfel,
+	# sondern der Krieg: ein Segel des Kriegsgegners. Hier wird die Regel
+	# geprueft, also steht der Gegner als Eingabe da.
+	var victim := WorldData.get_nation(GameState.Nation.SPAIN)
+	_assert(Commission.offer(4242, GameState.Nation.ENGLAND, 0, null, 0) == null,
+		"Ohne Kriegsgegner haengt kein Steckbrief aus")
+	_assert(Commission.offer(
+			4242, GameState.Nation.ENGLAND, 0,
+			WorldData.get_nation(GameState.Nation.ENGLAND), 0) == null,
+		"Und kein Gouverneur schreibt das eigene Segel aus")
+
+	var first := Commission.offer(4242, GameState.Nation.ENGLAND, 0, victim, 0)
+	var again := Commission.offer(4242, GameState.Nation.ENGLAND, 0, victim, 0)
+	_assert(first != null, "Der Gouverneur haengt einen Steckbrief aus")
+	_assert(first.target.captain_name == again.target.captain_name,
+		"Und beim zweiten Hinsehen steht derselbe Mann da")
+	_assert(first.target.ship_name == again.target.ship_name, "Auf demselben Schiff")
+	_assert(first.target.nation_id == GameState.Nation.SPAIN,
+		"Und er faehrt unter der Flagge des Kriegsgegners")
+	_assert(not first.target.hunts,
+		"Ein Auftragsziel jagt niemanden - es faehrt seiner Wege")
+
+	# Und mit jedem eingeloesten Auftrag wechselt er.
+	var seen := {}
+	for done_count in 6:
+		var later := Commission.offer(4242, GameState.Nation.ENGLAND, done_count, victim, 0)
+		seen[later.target.captain_name] = true
+	_assert(seen.size() >= 2,
+		"Ueber mehrere Auftraege hinweg wechselt der Gesuchte (%d verschiedene)"
+		% seen.size())
+
+	# Frist und Bericht als reine Rechnung.
+	var order := Commission.offer(4242, GameState.Nation.ENGLAND, 0, victim, 10)
+	_assert(order.deadline_day == 10 + Commission.DAYS, "Die Frist zaehlt ab heute")
+	_assert(not order.expired(10 + Commission.DAYS), "Am letzten Tag laeuft sie noch")
+	_assert(order.expired(11 + Commission.DAYS), "Am Tag danach nicht mehr")
+	_assert(order.days_left(10) == Commission.DAYS, "Und sie zaehlt herunter")
+	order.done = true
+	_assert(not order.expired(999),
+		"Wer den Mann gestellt hat, darf sich mit dem Bericht Zeit lassen")
+	_assert(order.can_report(GameState.Nation.ENGLAND, 1),
+		"Gemeldet wird in einer Stadt der eigenen Krone")
+	_assert(not order.can_report(GameState.Nation.ENGLAND, 0),
+		"In einem Dorf sitzt niemand, der den Bericht entgegennimmt")
+	_assert(not order.can_report(GameState.Nation.SPAIN, 2),
+		"Und ein fremder Gouverneur zahlt nicht fuer fremde Auftraege")
+	_assert(order.matches(order.target.captain_name, order.target.nation_id),
+		"Der Gesuchte wird an Namen und Flagge wiedererkannt")
+	_assert(not order.matches(order.target.captain_name, GameState.Nation.ENGLAND),
+		"Ein Namensvetter unter anderer Flagge ist nicht derselbe Mann")
+	_assert(not order.matches("", order.target.nation_id),
+		"Und ein namenloses Segel ist nie der Gesuchte")
+
+	# Dasselbe durch GameState, mit den echten Nationsdaten.
+	GameState.new_campaign("Beauftragter", 20260904)
+	_assert(GameState.commission == null, "Eine neue Kampagne faengt ohne Auftrag an")
+	_assert(GameState.commissions_done == 0, "Und ohne eingeloeste")
+	_assert(GameState.commission_offer() == null,
+		"Ohne Kaperbrief haengt kein Steckbrief aus - der Brief ist die Erlaubnis")
+	_assert(not GameState.can_accept_commission(GameState.Nation.ENGLAND),
+		"Und es gibt nichts anzunehmen")
+
+	_assert(GameState.issue_letter(GameState.Nation.ENGLAND), "England stellt den Brief aus")
+	var offered := GameState.commission_offer()
+	_assert(offered != null, "Jetzt haengt einer aus")
+	_assert(GameState.can_accept_commission(GameState.Nation.ENGLAND),
+		"Und der Gouverneur vergibt ihn")
+	_assert(not GameState.can_accept_commission(GameState.Nation.SPAIN),
+		"Ein fremder nicht - Auftraege gibt es nur von der eigenen Krone")
+	_assert(GameState.accept_commission(GameState.Nation.ENGLAND), "Angenommen")
+	_assert(GameState.commission != null, "Der Auftrag steckt in der Tasche")
+	_assert(GameState.commission.target.captain_name == offered.target.captain_name,
+		"Und es ist der Mann vom Steckbrief")
+	_assert(GameState.commission.target.nation_id
+			== WorldData.enemy_of(GameState.Nation.ENGLAND),
+		"Er faehrt unter der Flagge, mit der England gerade Krieg fuehrt")
+	_assert(GameState.commission.waters_town_id >= 0,
+		"Mit der Annahme steht sein Revier fest")
+	_assert(not GameState.commission.waters_known,
+		"Wo das liegt, sagt der Steckbrief aber nicht")
+	_assert(not GameState.accept_commission(GameState.Nation.ENGLAND),
+		"Zwei Auftraege gleichzeitig gibt es nicht")
+
+	# Erledigt wird ueber Namen und Flagge, nicht ueber das Schiffsobjekt.
+	var wanted: Adversary = GameState.commission.target
+	_assert(not GameState.commission_target_defeated("Irgendwer", wanted.nation_id),
+		"Ein beliebiges Segel erfuellt keinen Auftrag")
+	_assert(not GameState.commission.done, "Er steht also noch offen")
+	_assert(GameState.commission_target_defeated(wanted.captain_name, wanted.nation_id),
+		"Der Gesuchte schon")
+	_assert(GameState.commission.done, "Der Auftrag ist erledigt")
+	_assert(not GameState.commission_target_defeated(wanted.captain_name, wanted.nation_id),
+		"Und ein zweites Mal zaehlt er nicht")
+
+	# Bezahlt wird an Land, und nur beim richtigen Gouverneur.
+	var village := TownData.new()
+	village.nation_id = GameState.Nation.ENGLAND
+	village.size_tier = 0
+	var foreign := TownData.new()
+	foreign.nation_id = GameState.Nation.SPAIN
+	foreign.size_tier = 2
+	var seat := TownData.new()
+	seat.nation_id = GameState.Nation.ENGLAND
+	seat.size_tier = 1
+
+	_assert(not GameState.can_report_commission(village), "Im Dorf nimmt niemand den Bericht an")
+	_assert(not GameState.report_commission(foreign), "Und in Spanien erst recht nicht")
+	var purse := GameState.gold
+	var patron_before := GameState.reputation_with(GameState.Nation.ENGLAND)
+	var reward := GameState.commission.reward_gold
+	_assert(GameState.report_commission(seat), "In einer englischen Stadt schon")
+	_assert(GameState.gold == purse + reward, "Der Gouverneur zahlt %d Gold" % reward)
+	_assert(GameState.reputation_with(GameState.Nation.ENGLAND) > patron_before,
+		"Und rechnet es hoch an")
+	_assert(GameState.commission == null, "Der Auftrag ist abgeschlossen")
+	_assert(GameState.commissions_done == 1, "Und mitgezaehlt")
+	_assert(Commission.REPUTATION_REWARD > -NavalCombat.PRIZE_REPUTATION,
+		"Ein Auftrag ist die einzige Tat, bei der das Ansehen unterm Strich steigt")
+
+	# Der naechste Steckbrief ist ein anderer - der alte Mann ist gebracht.
+	var next_offer := GameState.commission_offer()
+	_assert(next_offer != null, "Es haengt gleich der naechste aus")
+	_assert(next_offer.reward_gold > reward, "Und er ist besser bezahlt")
+
+	_check_commission_deadline()
+	_check_commission_and_letter()
+
+
+## Die Frist. Ohne sie waere die Annahme ein Knopf ohne Gegenseite.
+func _check_commission_deadline() -> void:
+	GameState.new_campaign("Saeumiger", 20260905)
+	GameState.issue_letter(GameState.Nation.ENGLAND)
+	_assert(GameState.accept_commission(GameState.Nation.ENGLAND), "Auftrag angenommen")
+
+	var before := GameState.reputation_with(GameState.Nation.ENGLAND)
+	# Einen Tag vor Ablauf passiert nichts.
+	GameState._check_commission_deadline(GameState.commission.deadline_day)
+	_assert(GameState.commission != null, "Am letzten Tag laeuft der Auftrag noch")
+
+	GameState._check_commission_deadline(GameState.commission.deadline_day + 1)
+	_assert(GameState.commission == null, "Einen Tag spaeter ist er verfallen")
+	_assert(GameState.reputation_with(GameState.Nation.ENGLAND) < before,
+		"Und der Gouverneur rechnet es an (%d statt %d)" % [
+			GameState.reputation_with(GameState.Nation.ENGLAND), before
+		])
+
+	# Ein erledigter Auftrag verfaellt nicht mehr, nur sein Lohn.
+	_assert(GameState.accept_commission(GameState.Nation.ENGLAND), "Der naechste Auftrag")
+	var wanted: Adversary = GameState.commission.target
+	GameState.commission_target_defeated(wanted.captain_name, wanted.nation_id)
+	var settled := GameState.reputation_with(GameState.Nation.ENGLAND)
+	GameState._check_commission_deadline(GameState.commission.deadline_day + 99)
+	_assert(GameState.commission != null,
+		"Wer geliefert hat, verliert den Auftrag nicht durch Warten")
+	_assert(GameState.reputation_with(GameState.Nation.ENGLAND) == settled,
+		"Und zahlt dafuer auch nichts")
+
+
+## Auftrag und Kaperbrief haengen zusammen: Der Brief traegt den Auftrag.
+func _check_commission_and_letter() -> void:
+	# Den Brief zurueckzugeben laesst den Gouverneur mit dem Auftrag sitzen.
+	GameState.new_campaign("Abtruennig", 20260906)
+	GameState.issue_letter(GameState.Nation.ENGLAND)
+	_assert(GameState.accept_commission(GameState.Nation.ENGLAND), "Auftrag angenommen")
+	var before := GameState.reputation_with(GameState.Nation.ENGLAND)
+	GameState.return_letter()
+	_assert(GameState.commission == null, "Mit dem Brief geht der Auftrag")
+	_assert(GameState.reputation_with(GameState.Nation.ENGLAND) < before,
+		"Und ein zugesagter Mann, der nicht kommt, wird angerechnet")
+
+	# Ohne Auftrag kostet dieselbe Rueckgabe weiterhin nichts.
+	GameState.issue_letter(GameState.Nation.ENGLAND)
+	var idle := GameState.reputation_with(GameState.Nation.ENGLAND)
+	GameState.return_letter()
+	_assert(GameState.reputation_with(GameState.Nation.ENGLAND) == idle,
+		"Einen Brief ohne offenen Auftrag niederzulegen schadet niemandem")
+
+	# Der Seitenwechsel nimmt den Auftrag mit, und zwar zu Lasten des alten
+	# Patrons.
+	GameState.new_campaign("Wendehals", 20260907)
+	GameState.issue_letter(GameState.Nation.FRANCE)
+	_assert(GameState.accept_commission(GameState.Nation.FRANCE), "Ein franzoesischer Auftrag")
+	GameState.issue_letter(GameState.Nation.NETHERLANDS)
+	_assert(GameState.commission == null,
+		"Wer die Seite wechselt, laesst den alten Auftrag liegen")
+
+	# Verrat zieht den Brief ein und den Auftrag mit - aber ohne zweite
+	# Rechnung. Derselbe Vorgang darf nicht zweimal gebucht werden.
+	GameState.new_campaign("Verraeter", 20260908)
+	GameState.issue_letter(GameState.Nation.ENGLAND)
+	_assert(GameState.accept_commission(GameState.Nation.ENGLAND), "Ein englischer Auftrag")
+	var patron_before := GameState.reputation_with(GameState.Nation.ENGLAND)
+	var betrayal := Standing.weighted_change(
+		LetterOfMarque.BETRAYAL_COST,
+		WorldData.get_nation(GameState.Nation.ENGLAND).reputation_sensitivity
+	)
+	_assert(GameState.settle_letter_prize(GameState.Nation.ENGLAND)
+			== LetterOfMarque.Verdict.REVOKED,
+		"Den eigenen Auftraggeber aufzubringen zieht den Brief ein")
+	_assert(GameState.commission == null, "Und den Auftrag mit ihm")
+	_assert(GameState.reputation_with(GameState.Nation.ENGLAND) == patron_before + betrayal,
+		"Genau einmal gebucht - der Verrat ist mit BETRAYAL_COST bezahlt")
+
+
+## Und dasselbe durch die Szene gefahren (Regel C6): Ein Auftrag ist erst wahr,
+## wenn der Benannte wirklich auf See liegt und wirklich aufgebracht wird.
+func _check_commission_at_sea() -> void:
+	GameState.new_campaign("Jaeger", 20260909)
+	GameState.issue_letter(GameState.Nation.ENGLAND)
+	_assert(GameState.accept_commission(GameState.Nation.ENGLAND), "Auftrag angenommen")
+	var wanted: Adversary = GameState.commission.target
+
+	var combat := NavalCombat.new()
+	# Keine zufaelligen Segel dazwischen.
+	combat.max_ships = 0
+	add_child(combat)
+
+	var mine := _make_ship("res://resources/ships/sloop.tres")
+	var here := _open_sea()
+	mine.global_position = Vector3(here.x, 0.0, here.y)
+	combat.setup(mine)
+
+	# Sein Revier. Bis M6 wurde der Gesuchte gesetzt, wo auch immer der Spieler
+	# fuhr - man konnte einen Auftrag nicht suchen, nur abwarten.
+	var waters := WorldData.get_town(GameState.commission.waters_town_id)
+	_assert(waters != null, "Der angenommene Auftrag hat ein Revier")
+	var away := waters.position + Vector2(Commission.WATERS_RANGE * 3.0, 0.0)
+	mine.global_position = Vector3(away.x, 0.0, away.y)
+	_assert(not combat._place_named(), "Weit ab davon laeuft er nicht aus")
+
+	var near := _open_sea_near(waters.position, Commission.WATERS_RANGE * 0.7)
+	mine.global_position = Vector3(near.x, 0.0, near.y)
+	_assert(near.distance_to(waters.position) <= Commission.WATERS_RANGE,
+		"Der Pruefplatz liegt wirklich in seinem Revier")
+
+	_assert(combat._place_named(), "In seinem Revier laeuft der Gesuchte aus")
+	_assert(combat.ships().size() == 1, "Und liegt als einziges Segel auf See")
+	var hunted: Ship = combat.ships()[0]
+	_assert(hunted.captain_name == wanted.captain_name,
+		"Es ist der Mann vom Steckbrief (%s)" % hunted.captain_name)
+	_assert(hunted.ship_name == wanted.ship_name, "Auf dem Schiff vom Steckbrief")
+	_assert(hunted.nation_id == wanted.nation_id, "Unter der Flagge vom Steckbrief")
+	_assert(hunted.warship, "Ein Auftragsziel ist ein Kriegsschiff, kein Frachter")
+	_assert(not combat._place_named(), "Und es gibt immer nur einen Benannten")
+
+	var captain := combat._captain_of(hunted)
+	_assert(captain != null and not captain.provoked,
+		"Er faehrt seiner Wege, bis ihm jemand in die Quere kommt")
+
+	# Aufbringen erledigt den Auftrag - aber es bezahlt ihn nicht.
+	hunted.gold = 400
+	hunted.global_position = mine.global_position + Vector3(60.0, 0.0, 0.0)
+	hunted.strike()
+	_assert(combat.prize_in_reach() == hunted, "Die Prise liegt laengsseit")
+	var purse := GameState.gold
+	combat.take_prize(hunted)
+	_assert(GameState.commission != null and GameState.commission.done,
+		"Der Auftrag ist erledigt")
+	_assert(GameState.gold == purse + 400,
+		"Bezahlt hat bisher nur die See, nicht der Gouverneur")
+	_assert(GameState.commissions_done == 0, "Gemeldet ist er noch nicht")
+	_assert(not combat._place_named(), "Und es faehrt kein zweiter Gesuchter aus")
+
+	combat.queue_free()
+	mine.queue_free()
+
+
+## Das Kopfgeld - dieselbe Mechanik von der anderen Seite.
+##
+## Beruechtigtheit waechst seit M4 mit jeder Prise und sinkt nie, tat aber nur
+## eines: Gegner strichen frueher die Flagge. Ein Ruf, der ausschliesslich
+## hilft, ist kein Preis.
+func _check_bounty() -> void:
+	_assert(not Bounty.due(0, Standing.Level.HOSTILE),
+		"Wer nichts angestellt hat, wird nicht gesucht - auch nicht von einem Feind")
+	_assert(Bounty.due(Bounty.HUNTED_FROM, Standing.Level.HOSTILE),
+		"Ab der Schwelle schickt eine feindliche Krone jemanden los")
+	_assert(not Bounty.due(100, Standing.Level.SUSPECT),
+		"Eine misstrauische nicht - die schickt Patrouillen, kein Kopfgeld")
+	_assert(not Bounty.due(100, Standing.Level.NEUTRAL), "Eine gleichgueltige erst recht nicht")
+	_assert(Bounty.HUNTED_FROM < Bounty.FEARED_FROM,
+		"Erst kommt die Patrouille, dann die Fregatte")
+	_assert(Bounty.class_for(Bounty.HUNTED_FROM) == Bounty.PATROL_CLASS,
+		"An der ersten Schwelle kommt eine Patrouillenschaluppe")
+	_assert(Bounty.class_for(Bounty.FEARED_FROM) == Bounty.FRIGATE_CLASS,
+		"An der zweiten eine Fregatte")
+	_assert(Bounty.purse(90) > Bounty.purse(40),
+		"Wer teurer ausgeschrieben ist, bekommt einen teurer bezahlten Jaeger")
+
+	# Und auf See.
+	GameState.new_campaign("Gesuchter", 20260910)
+	var combat := NavalCombat.new()
+	combat.max_ships = 0
+	add_child(combat)
+
+	var mine := _make_ship("res://resources/ships/sloop.tres")
+	var here := _open_sea()
+	mine.global_position = Vector3(here.x, 0.0, here.y)
+	combat.setup(mine)
+
+	_assert(not combat._place_named(), "Ohne Ruf und ohne Auftrag laeuft niemand aus")
+
+	GameState.add_notoriety(Bounty.FEARED_FROM)
+	while GameState.standing_with(GameState.Nation.SPAIN) != Standing.Level.HOSTILE:
+		GameState.change_reputation(GameState.Nation.SPAIN, -10)
+
+	_assert(combat._place_named(), "Jetzt schickt Spanien einen Kopfgeldjaeger")
+	var hunter: Ship = combat.ships()[0]
+	_assert(not hunter.captain_name.is_empty(),
+		"Er hat einen Namen (%s)" % hunter.captain_name)
+	_assert(hunter.nation_id == GameState.Nation.SPAIN, "Und faehrt unter spanischer Flagge")
+	_assert(hunter.ship_class.id == &"frigate",
+		"Ab der zweiten Schwelle auf einer Fregatte")
+	_assert(hunter.gold >= Bounty.PURSE_BASE, "Mit dem Vorschuss auf den eigenen Kopf")
+
+	var captain := combat._captain_of(hunter)
+	_assert(captain != null and captain.provoked,
+		"Ein Jaeger faengt gereizt an - er ist genau dafuer ausgelaufen")
+	_assert(captain.wants_battle(), "Und sucht damit auch das Gefecht")
+
+	# Erledigt, und danach ist eine Weile Ruhe.
+	hunter.global_position = mine.global_position + Vector3(60.0, 0.0, 0.0)
+	hunter.strike()
+	combat.take_prize(hunter)
+	_assert(combat._bounty_rest > 0.0, "Nach einem Jaeger kehrt Ruhe ein")
+	_assert(not combat._place_named(), "Der naechste steht nicht sofort am Horizont")
+
+	combat.queue_free()
+	mine.queue_free()
+
+
 ## Das Entern - der zweite Weg zur Prise.
 func _check_boarding() -> void:
 	GameState.new_campaign("Enterer", 4711)
@@ -1515,40 +2367,45 @@ func _check_boarding_at_sea() -> void:
 	mine.queue_free()
 
 
-## Die Werft ersetzt auch Leute - seit M4 kostet ein Gefecht Mannschaft.
-func _check_hiring() -> void:
+## Die Schenke: Leute und Gerede.
+##
+## Angeheuert wurde bis M6 in der Werft. Dass es dorthin nicht gehoert, stand
+## schon dort im Kommentar - die Rechnung ist dieselbe geblieben, nur der Ort
+## stimmt jetzt, und es ist ein Grund dazugekommen, warum es einmal mehr und
+## einmal weniger kostet.
+func _check_tavern() -> void:
 	GameState.new_campaign("Werber", 31415)
 	var town: TownData = WorldData.towns[0]
 
-	_assert(Shipyard.crew_missing() == GameState.max_crew() - GameState.crew,
+	_assert(Tavern.crew_missing() == GameState.max_crew() - GameState.crew,
 		"Es fehlt, was zur vollen Besatzung fehlt")
 	GameState.crew = GameState.max_crew()
-	_assert(Shipyard.full_hire_cost(town) == 0, "Volle Mannschaft kostet nichts")
-	_assert(Shipyard.hire(town) == 0, "Und laesst sich nicht aufstocken")
+	_assert(Tavern.full_hire_cost(town) == 0, "Volle Mannschaft kostet nichts")
+	_assert(Tavern.hire(town) == 0, "Und laesst sich nicht aufstocken")
 
 	GameState.crew = GameState.max_crew() - 10
 	GameState.gold = 100000
 	var before := GameState.gold
-	var hired := Shipyard.hire(town)
+	var hired := Tavern.hire(town)
 	_assert(hired == 10, "Mit Gold kommt die ganze Mannschaft (%d Mann)" % hired)
 	_assert(GameState.crew == GameState.max_crew(), "Und das Schiff ist wieder voll besetzt")
 	_assert(GameState.gold < before, "Handgeld kostet Gold (%d)" % (before - GameState.gold))
 
 	# Teilanheuerung: Wer knapp bei Kasse ist, bekommt, was er bezahlen kann.
 	GameState.crew = GameState.max_crew() - 10
-	GameState.gold = Shipyard.hire_cost(town, 3)
-	var partial := Shipyard.hire(town)
+	GameState.gold = Tavern.hire_cost(town, 3)
+	var partial := Tavern.hire(town)
 	_assert(partial == 3, "Knappes Gold heuert anteilig an (%d Mann)" % partial)
 	_assert(GameState.gold == 0, "Und ist danach ausgegeben")
 
 	GameState.gold = 0
-	_assert(Shipyard.hire(town) == 0, "Ohne Gold kommt niemand")
+	_assert(Tavern.hire(town) == 0, "Ohne Gold kommt niemand")
 
 	# Eine grosse Stadt ist billiger als ein Dorf - dieselbe Regel wie beim Rumpf.
 	var village := _town_of_tier(0)
 	var capital := _town_of_tier(2)
 	if village != null and capital != null:
-		_assert(Shipyard.hire_cost(capital, 10) < Shipyard.hire_cost(village, 10),
+		_assert(Tavern.hire_cost(capital, 10) < Tavern.hire_cost(village, 10),
 			"In der Hauptstadt heuert man billiger an als im Dorf")
 
 	_assert(GameState.max_crew() > 0, "Die Mannschaftsgroesse kommt aus der Schiffsklasse")
@@ -1581,6 +2438,91 @@ func _check_hiring() -> void:
 	_assert(is_equal_approx(afloat.handling(), GameState.handling()),
 		"Schiff und Spielstand rechnen die Fahrbarkeit gleich")
 	afloat.queue_free()
+
+	# Beruechtigtheit senkt das Handgeld. Das ist die erste Folge dieser Achse,
+	# die dem Spieler nuetzt - bis hierher hat sie ihm nur Jaeger geschickt.
+	GameState.crew = GameState.max_crew() - 10
+	var unknown_price := Tavern.hire_cost(town, 10)
+	GameState.add_notoriety(100)
+	var famous_price := Tavern.hire_cost(town, 10)
+	_assert(famous_price < unknown_price,
+		"Zu einem beruechtigten Kapitaen kommen sie billiger (%d statt %d)"
+		% [famous_price, unknown_price])
+	_assert(famous_price > 0, "Aber nicht umsonst")
+
+	_check_tavern_gossip()
+
+
+## Das Gerede - der eigentliche Grund, eine Schenke zu betreten.
+func _check_tavern_gossip() -> void:
+	# Der Handelstipp: eine Ware, die hier wirklich liegt, in einem Hafen, den
+	# man auch erreicht. Ein Tipp, dem man nicht nachfahren kann, ist keiner.
+	GameState.new_campaign("Zuhoerer", 31416)
+	var with_tips := 0
+	var checked := false
+	for candidate: TownData in WorldData.towns:
+		var tip := Tavern.trade_tip(candidate, WorldData.towns)
+		if tip.is_empty():
+			continue
+		with_tips += 1
+		if checked:
+			continue
+		checked = true
+		var target: TownData = tip["town"]
+		var cargo: CargoType = tip["cargo"]
+		_assert(target.id != candidate.id, "Der Tipp zeigt nicht auf den eigenen Hafen")
+		_assert(candidate.position.distance_to(target.position) <= Tavern.GOSSIP_RANGE,
+			"Sondern auf einen in Hoerweite")
+		_assert(candidate.available(cargo.id) >= Tavern.GOSSIP_STOCK,
+			"Die Ware liegt hier in Menge")
+		_assert(target.sell_price(cargo) > candidate.buy_price(cargo),
+			"Und bringt dort mehr ein, als sie hier kostet")
+	_assert(with_tips > 0,
+		"In der Karibik gibt es etwas zu erzaehlen (%d von %d Haefen)"
+		% [with_tips, WorldData.towns.size()])
+	_assert(checked, "Und der erste Tipp haelt, was er verspricht")
+
+	# Die Auswahl des Reviers als reine Rechnung: der naechstgelegene Hafen
+	# der gesuchten Flagge.
+	var near := TownData.new()
+	near.id = 7
+	near.nation_id = GameState.Nation.FRANCE
+	near.position = Vector2(1200.0, 0.0)
+	var far := TownData.new()
+	far.id = 8
+	far.nation_id = GameState.Nation.FRANCE
+	far.position = Vector2(9000.0, 0.0)
+	var wrong_flag := TownData.new()
+	wrong_flag.id = 9
+	wrong_flag.nation_id = GameState.Nation.ENGLAND
+	wrong_flag.position = Vector2(10.0, 0.0)
+	var choices: Array[TownData] = [far, wrong_flag, near]
+	_assert(Commission.waters_for(choices, GameState.Nation.FRANCE, Vector2.ZERO) == 7,
+		"Der naechste Hafen der gesuchten Flagge")
+	_assert(Commission.waters_for(choices, GameState.Nation.NETHERLANDS, Vector2.ZERO) == -1,
+		"Eine Krone ohne Hafen gibt kein Revier her - dann kreuzt er ueberall")
+	_assert(Commission.in_waters(Vector2.ZERO, Vector2(Commission.WATERS_RANGE - 1.0, 0.0)),
+		"Knapp drinnen ist drinnen")
+	_assert(not Commission.in_waters(Vector2.ZERO, Vector2(Commission.WATERS_RANGE + 1.0, 0.0)),
+		"Knapp draussen ist draussen")
+	_assert(Commission.WATERS_RANGE > NavalCombat.DESPAWN_DISTANCE,
+		"Ein Revier ist groesser als die Entfernung, in der ein Segel verschwindet - "
+		+ "sonst faehrt man dem Gesuchten waehrend der Verfolgung davon")
+
+	# Und das Gerede ueber den Gesuchten. Es ist der Ertrag des Besuchs: Vorher
+	# weiss man, wen man sucht, danach auch wo.
+	_assert(GameState.hear_commission_rumour() == null,
+		"Ohne Auftrag hat der Wirt nichts zu erzaehlen")
+	_assert(GameState.issue_letter(GameState.Nation.ENGLAND), "England stellt den Brief aus")
+	_assert(GameState.accept_commission(GameState.Nation.ENGLAND), "Auftrag angenommen")
+	_assert(not GameState.commission.waters_known,
+		"Der Steckbrief im Palast sagt nicht, wo der Gesuchte kreuzt")
+	var waters := GameState.hear_commission_rumour()
+	_assert(waters != null, "Der Wirt sagt es")
+	_assert(waters.id == GameState.commission.waters_town_id, "Und meint das Revier des Auftrags")
+	_assert(waters.nation_id == GameState.commission.target.nation_id,
+		"Er kreuzt vor einer Kueste seiner eigenen Flagge")
+	_assert(GameState.commission.waters_known, "Ab jetzt steht es auch auf der Seekarte")
 
 
 func _town_of_tier(tier: int) -> TownData:
@@ -1832,6 +2774,14 @@ func _fight(maneuvering: bool) -> Dictionary:
 	# selbst das Gefecht sucht, entscheidet die Lage.
 	var theirs := _make_ship("res://resources/ships/patrol_sloop.tres")
 	theirs.ship_name = "Testgegner"
+	# Ein Duell ist ein Gefecht zwischen Feinden. Seit M6 braucht ein Kapitaen
+	# dafuer einen Grund: Ohne feindliches Verhaeltnis faehrt die Patrouille
+	# vorbei, statt zu schiessen. Das wird hier hergestellt, nicht umgangen -
+	# die Abnahmebedingung von M4 soll durch dieselben Regeln laufen wie das
+	# Spiel.
+	theirs.nation_id = GameState.Nation.SPAIN
+	while GameState.standing_with(theirs.nation_id) != Standing.Level.HOSTILE:
+		GameState.change_reputation(GameState.Nation.SPAIN, -10)
 	# Laengsseits steuerbord auf wirksamem Abstand, gleicher Kurs - die Lage,
 	# in der ein Gefecht tatsaechlich beginnt. Das Aufschliessen davor ist eine
 	# Frage der Geschwindigkeit, nicht des Gefechts.
@@ -1900,6 +2850,23 @@ func _open_sea() -> Vector2:
 		if _water_around(spot, 1200.0):
 			return spot
 	return Vector2.ZERO
+
+
+## Ein Platz auf offenem Wasser im Umkreis eines Punktes.
+##
+## Wie [method _open_sea], nur nicht irgendwo in der Welt, sondern dort, wo
+## geprueft werden soll - fuer das Revier eines Gesuchten. Faellt auf den
+## Mittelpunkt zurueck, wenn nichts zu finden war; die Pruefung schlaegt dann
+## fehl, statt still etwas anderes zu messen.
+func _open_sea_near(center: Vector2, radius: float) -> Vector2:
+	var rng := RandomNumberGenerator.new()
+	rng.seed = DUEL_SEED
+	for attempt in 500:
+		var angle := rng.randf_range(-PI, PI)
+		var spot := center + Vector2(sin(angle), cos(angle)) * rng.randf_range(0.3, 1.0) * radius
+		if _water_around(spot, 1200.0):
+			return spot
+	return center
 
 
 func _water_around(center: Vector2, radius: float) -> bool:

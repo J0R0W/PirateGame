@@ -11,5 +11,6 @@ color = Color(0.180, 0.373, 0.639, 1)
 name_prefixes = PackedStringArray("Port", "Saint", "Cap", "Baie", "Petit", "Grand", "Nouvelle", "Anse")
 name_suffixes = PackedStringArray("Pierre", "Marie", "Louis", "Espoir", "Rouge", "Blanc", "Fortune", "Liberté", "Soleil", "Étoile", "Croix", "Tranquille", "Sauvage")
 ship_names = PackedStringArray("L'Hirondelle", "Belle Poule", "Le Fier", "Saint-Michel", "La Sirène", "Le Corsaire", "L'Aurore", "Bon Espoir", "Le Faucon", "La Diligente")
+captain_names = PackedStringArray("Étienne Lacroix", "Guillaume Rochefort", "Antoine Duval", "Armand Beauvais", "Luc Fontaine", "Gaspard Thibault", "Émile Marchand", "Blaise Ferrand")
 aggression = 0.5
 reputation_sensitivity = 0.9

@@ -11,5 +11,6 @@ color = Color(0.690, 0.227, 0.180, 1)
 name_prefixes = PackedStringArray("Port", "New", "Fort", "Kings", "Queens", "Saint", "Cape", "Old")
 name_suffixes = PackedStringArray("Royal", "Haven", "Harbour", "Point", "Cross", "Landing", "Bay", "Reach", "Hollow", "Ridge", "George", "Charles", "Anne", "Bristol", "Thorn")
 ship_names = PackedStringArray("Swiftsure", "Mary Rose", "Golden Hind", "Sea Wolf", "Endeavour", "Bristol Maid", "Thunderer", "Kingfisher", "Providence", "Nightingale")
+captain_names = PackedStringArray("Nathaniel Cross", "Ezekiel Blackwood", "Samuel Thorne", "Jonas Vane", "Richard Ashcroft", "Oliver Pike", "Silas Merrow", "Toby Kingsley")
 aggression = 0.55
 reputation_sensitivity = 1.0

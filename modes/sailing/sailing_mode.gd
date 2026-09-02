@@ -164,7 +164,16 @@ func _unhandled_input(event: InputEvent) -> void:
 			_combat.board(_boarding_target)
 		elif _dock_target != null:
 			get_viewport().set_input_as_handled()
-			SceneRouter.enter_port(_dock_target.id)
+			# Ein feindlicher Hafen laesst niemanden herein. Die Aufforderung
+			# im HUD sagt das schon vorher - hier steht es trotzdem, damit ein
+			# Tastendruck nie einfach folgenlos verpufft (Regel A8).
+			if not Standing.port_open(GameState.standing_with(_dock_target.nation_id)):
+				var nation := WorldData.get_nation(_dock_target.nation_id)
+				_hud.show_notice("%s verweigert dir den Hafen." % [
+					nation.display_name if nation != null else "Die Hafenwache"
+				])
+			else:
+				SceneRouter.enter_port(_dock_target.id)
 	elif event.is_action_pressed("pause"):
 		get_viewport().set_input_as_handled()
 		# Offenes Fenster schliessen, statt gleich das Spiel zu verlassen.

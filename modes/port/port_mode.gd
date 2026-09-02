@@ -9,16 +9,24 @@
 ## wieder hinaus.
 extends Control
 
-## Die Abteilungen des Hafens. Weitere - Taverne, Gouverneur, Handelshaus -
-## kommen als eigene Eintraege dazu.
-enum Section { MARKET, SHIPYARD }
+## Die Abteilungen des Hafens. Ein Handelshaus und ein Hehler kommen als
+## eigene Eintraege dazu.
+##
+## Die Schenke steht hinten in der Aufzaehlung und trotzdem in der Mitte des
+## Menues - genau dafuer gibt es SECTION_ORDER: Ein neuer Eintrag soll die
+## Werte der alten nicht verschieben, sonst zeigt jeder gespeicherte Index auf
+## den falschen Bildschirm.
+enum Section { MARKET, SHIPYARD, GOVERNOR, TAVERN }
 
-## Reihenfolge im Menue. Eine Konstante statt der Aufzaehlung selbst, damit
-## sich die Anordnung aendern laesst, ohne die Werte zu verschieben.
-const SECTION_ORDER: Array[int] = [Section.MARKET, Section.SHIPYARD]
+## Reihenfolge im Menue: der Weg vom Kai in die Stadt hinauf.
+const SECTION_ORDER: Array[int] = [
+	Section.MARKET, Section.SHIPYARD, Section.TAVERN, Section.GOVERNOR
+]
 const SECTION_NAMES: Dictionary = {
 	Section.MARKET: "Markt",
 	Section.SHIPYARD: "Werft",
+	Section.TAVERN: "Schenke",
+	Section.GOVERNOR: "Gouverneur",
 }
 
 ## So lange bleibt eine Rueckmeldung stehen.
@@ -144,6 +152,23 @@ func show_section(section: int) -> void:
 			yard.setup(town)
 			yard.repaired.connect(_show_message)
 			panel = yard
+		Section.TAVERN:
+			var tavern := TavernPanel.new()
+			tavern.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+			_content.add_child(tavern)
+			tavern.setup(town)
+			tavern.acted.connect(_show_message)
+			panel = tavern
+		Section.GOVERNOR:
+			# Auch in einem Dorf, in dem kein Gouverneur sitzt: Der Bildschirm
+			# sagt dann, wo einer sitzt. Ein Menuepunkt, der mal da ist und mal
+			# nicht, erklaert das nicht (Regel A8).
+			var palace := GovernorPanel.new()
+			palace.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+			_content.add_child(palace)
+			palace.setup(town)
+			palace.acted.connect(_show_message)
+			panel = palace
 
 
 func _show_message(text: String) -> void:
@@ -170,9 +195,11 @@ func _on_cargo_changed(_cargo_id: StringName, _amount: int) -> void:
 
 func _on_condition_changed(_hull: int, _sails: int) -> void:
 	_refresh_footer()
-	# Der Marktbildschirm zeigt keinen Zustand, die Werft schon.
+	# Der Marktbildschirm zeigt keinen Zustand, Werft und Schenke schon.
 	if panel is ShipyardPanel:
 		(panel as ShipyardPanel).refresh()
+	elif panel is TavernPanel:
+		(panel as TavernPanel).refresh()
 
 
 func _save() -> void:

@@ -46,6 +46,8 @@ var _notice_timer: float = 0.0
 var _prize_prompt: String = ""
 var _boarding_prompt: String = ""
 var _dock_prompt_text: String = ""
+## Steht der Hafen in Reichweite dem Spieler offen?
+var _dock_closed: bool = false
 
 
 func _ready() -> void:
@@ -75,6 +77,10 @@ func _ready() -> void:
 	EventBus.boarding_target_changed.connect(_on_boarding_target_changed)
 	EventBus.boarding_resolved.connect(_on_boarding_resolved)
 	EventBus.player_struck.connect(_on_player_struck)
+	EventBus.letter_changed.connect(_on_letter_changed)
+	EventBus.named_captain_sighted.connect(_on_named_captain_sighted)
+	EventBus.commission_changed.connect(_on_commission_changed)
+	EventBus.treaties_changed.connect(_on_treaties_changed)
 
 
 func setup(target: Ship, battle: NavalCombat = null) -> void:
@@ -180,11 +186,21 @@ func _update_target() -> void:
 	var nation := WorldData.get_nation(enemy.nation_id)
 	var class_name_text := enemy.ship_class.display_name if enemy.ship_class != null else "Segler"
 
-	_target_name.text = enemy.ship_name
-	_target_class.text = "%s%s   ·   %d m" % [
+	# Das Verhaeltnis zur Nation steht dabei, seit es entscheidet, ob dieses
+	# Segel angreift oder vorbeifaehrt. Ohne die Angabe sieht ein Ueberfall
+	# nach Willkuer aus - dabei ist er die Folge der eigenen letzten Prise.
+	#
+	# Ein benannter Kapitaen steht mit Namen da. Das ist die Wiedererkennung,
+	# auf der Auftrag und Kopfgeld beruhen: Ohne sie waere die Fregatte am
+	# Horizont nur eine weitere Patrouille (Regel A8).
+	_target_name.text = enemy.ship_name if enemy.captain_name.is_empty() else (
+		"Kapitän %s   ·   %s" % [enemy.captain_name, enemy.ship_name]
+	)
+	_target_class.text = "%s%s   ·   %d m   ·   %s" % [
 		"%se " % nation.adjective.capitalize() if nation != null else "",
 		class_name_text,
 		int(distance),
+		Standing.title_of(GameState.standing_with(enemy.nation_id)),
 	]
 	if enemy.struck:
 		_target_condition.text = "Flagge gestrichen"
@@ -239,12 +255,102 @@ func _on_sail_sighted(ship_name: String, nation_id: int, warship: bool) -> void:
 	], Palette.PARCHMENT)
 
 
+## Ein Steckbrief ist am Horizont aufgetaucht.
+##
+## Eigene Meldung neben "Segel in Sicht", und in einer anderen Farbe: Ein
+## Jaeger ist eine Warnung (BAD), ein Gesuchter eine Gelegenheit (BRASS, wie
+## jede andere Sache des Kaperbriefs). Wer beides in dieselbe Zeile schriebe,
+## verloere genau den Unterschied, auf den es ankommt.
+func _on_named_captain_sighted(
+	captain_name: String, ship_name: String, nation_id: int, hunting: bool
+) -> void:
+	var nation := WorldData.get_nation(nation_id)
+	var crown := nation.display_name if nation != null else "Eine fremde Krone"
+	if hunting:
+		show_notice("Kopfgeldjäger:  Kapitän %s   ·   %s   ·   %s sucht dich" % [
+			captain_name, ship_name, crown
+		], Palette.BAD)
+	else:
+		show_notice("Der Gesuchte:  Kapitän %s   ·   %s   ·   %s" % [
+			captain_name, ship_name, crown
+		], Palette.BRASS)
+
+
+## Was ein Auftrag auf See macht.
+##
+## Nur zwei der vier Faelle kommen hier vor: Angenommen und gemeldet wird im
+## Palast, und dort laeuft dieses Signal in eine andere Szene. Erledigt und
+## abgelaufen passieren dagegen genau hier - das eine mitten im Gefecht, das
+## andere beim stillen Tageswechsel, wo es sonst niemandem auffiele.
+func _on_commission_changed(change: int) -> void:
+	match change:
+		Commission.Change.FULFILLED:
+			show_notice(
+				"Auftrag erledigt — melde dich beim Gouverneur.", Palette.GOOD
+			)
+		Commission.Change.FAILED:
+			show_notice("Der Auftrag ist verfallen.", Palette.BAD)
+
+
 func _on_ship_struck(ship_name: String) -> void:
 	show_notice("%s streicht die Flagge!" % ship_name, Palette.GOOD)
 
 
-func _on_prize_taken(ship_name: String, gold: int, units: int) -> void:
-	show_notice("Prise %s:  %d Gold, %d Einheiten" % [ship_name, gold, units], Palette.BRASS)
+## Was eine Prise eingebracht hat - und wem sie gutgeschrieben wird.
+##
+## Der Kaperbrief steht in derselben Zeile und nicht in einer eigenen Meldung:
+## Es ist dieselbe Tat, und die Meldezeile hat nur Platz fuer eine davon.
+func _on_prize_taken(ship_name: String, nation_id: int, gold: int, units: int) -> void:
+	var text := "Prise %s:  %d Gold, %d Einheiten" % [ship_name, gold, units]
+	if GameState.letter_covers(nation_id):
+		var patron := GameState.letter_patron()
+		if patron != null:
+			text += "   ·   %s schreibt sie gut" % patron.display_name
+	show_notice(text, Palette.BRASS)
+
+
+## Die Kronen haben ihre Buendnisse neu geordnet.
+##
+## Das Ereignis, das der Spieler am wenigsten kommen sieht - es passiert im
+## Kalender, nicht auf See. Deshalb steht es ueberhaupt im HUD: Ohne die
+## Meldung faende man erst beim naechsten Aufbringen heraus, dass der Brief
+## eine andere Flagge deckt als gestern.
+##
+## Wer einen Brief traegt, liest, was es fuer ihn heisst; wer keinen hat, die
+## neue Lage. Beides in einer Zeile waere zu lang und das Wichtige ganz hinten.
+func _on_treaties_changed(_day: int) -> void:
+	var patron := GameState.letter_patron()
+	if patron != null:
+		var enemy := WorldData.get_nation(WorldData.enemy_of(patron.id))
+		if enemy != null:
+			show_notice(
+				"Neue Bündnisse:  Dein %ser Kaperbrief deckt jetzt %se Prisen."
+				% [patron.adjective, enemy.adjective], Palette.BRASS
+			)
+			return
+
+	var parts: PackedStringArray = []
+	for war: Vector2i in WorldData.wars():
+		var first := WorldData.get_nation(war.x)
+		var second := WorldData.get_nation(war.y)
+		if first != null and second != null:
+			parts.append("%s gegen %s" % [first.subject_name(), second.subject_name()])
+	if parts.is_empty():
+		return
+	show_notice(
+		"Neue Bündnisse:  %s" % "   ·   ".join(parts), Palette.PARCHMENT
+	)
+
+
+## Der Kaperbrief hat sich geaendert.
+##
+## Auf See gibt es dafuer nur einen Grund: Wer den eigenen Auftraggeber
+## aufbringt, verliert ihn auf der Stelle. Angenommen und zurueckgegeben wird
+## im Gouverneurspalast, und dort laeuft dieses Signal in eine andere Szene.
+func _on_letter_changed(nation_id: int) -> void:
+	if nation_id != LetterOfMarque.NONE:
+		return
+	show_notice("Der Kaperbrief ist eingezogen.", Palette.BAD)
 
 
 func _on_player_struck(lost_gold: int, lost_units: int) -> void:
@@ -262,10 +368,15 @@ func _on_player_struck(lost_gold: int, lost_units: int) -> void:
 func _refresh_prompt() -> void:
 	if not _prize_prompt.is_empty():
 		_dock_prompt.text = _prize_prompt
+		_paint(_dock_prompt, Palette.PARCHMENT)
 	elif not _boarding_prompt.is_empty():
 		_dock_prompt.text = _boarding_prompt
+		_paint(_dock_prompt, Palette.PARCHMENT)
 	else:
 		_dock_prompt.text = _dock_prompt_text
+		# Ein verschlossener Hafen ist keine Aufforderung, sondern eine Absage -
+		# er wird abgeblendet statt in der Farbe einer Taste zu leuchten.
+		_paint(_dock_prompt, Palette.MUTED if _dock_closed else Palette.PARCHMENT)
 
 
 func _on_prize_target_changed(ship_name: String) -> void:
@@ -295,7 +406,17 @@ func _on_boarding_resolved(
 
 func _on_dock_target_changed(town_id: int) -> void:
 	var town := WorldData.get_town(town_id)
-	_dock_prompt_text = "" if town == null 		else "Leertaste   ·   In %s anlegen" % town.town_name
+	_dock_closed = town != null and not Standing.port_open(
+		GameState.standing_with(town.nation_id)
+	)
+	if town == null:
+		_dock_prompt_text = ""
+	elif _dock_closed:
+		# Es steht da, bevor die Taste gedrueckt wird: Wer vor einem
+		# verschlossenen Hafen liegt, soll das sehen und nicht ausprobieren.
+		_dock_prompt_text = "%s ist dir verschlossen" % town.town_name
+	else:
+		_dock_prompt_text = "Leertaste   ·   In %s anlegen" % town.town_name
 	_refresh_prompt()
 
 

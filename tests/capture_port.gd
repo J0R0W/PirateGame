@@ -25,9 +25,11 @@ func _ready() -> void:
 		town.town_name, town.tier_name(), _nation_name(town)
 	])
 
-	# Ein angeschlagenes Schiff, damit die Werft etwas anzuzeigen hat.
+	# Ein angeschlagenes Schiff, damit die Werft etwas anzuzeigen hat - und
+	# eine geschrumpfte Mannschaft fuer die Schenke.
 	GameState.damage_hull(38)
 	GameState.damage_sails(12)
+	GameState.crew = GameState.max_crew() - 14
 
 	var packed: PackedScene = load("res://modes/port/port_mode.tscn")
 	var port: Control = packed.instantiate()
@@ -49,7 +51,74 @@ func _ready() -> void:
 	await _wait(0.4)
 	await _shot("12_hafen_werft")
 
+	# Der Gouverneurspalast zweimal: mit dem Angebot und mit dem Brief in der
+	# Tasche. Die beiden Lagen sehen voellig verschieden aus - ein Bild von
+	# einer davon sagt nichts darueber, ob die andere passt.
+	port.show_section(port.Section.GOVERNOR)
+	await _wait(0.4)
+	await _shot("13_hafen_gouverneur")
+
+	var palace: GovernorPanel = port.panel as GovernorPanel
+	GameState.issue_letter(port.town.nation_id)
+	GameState.letter_prizes = 4
+	palace.refresh()
+	await _wait(0.4)
+	await _shot("14_hafen_kaperbrief")
+
+	# Der Palast hat vier Lagen, und jede aendert Ueberschrift, Absatz und Knopf
+	# zugleich - eine Aufnahme von einer sagt nichts ueber die anderen. Ohne
+	# Brief (13), mit Brief und ausgehaengtem Steckbrief (14), mit angenommenem
+	# Auftrag und laufender Frist (15), mit bekanntem Revier (17), erledigt und
+	# auf den Bericht wartend (18).
+	GameState.accept_commission(port.town.nation_id)
+	palace.refresh()
+	await _wait(0.4)
+	await _shot("15_hafen_auftrag")
+
+	# Die Schenke, und zwar mit allem, was sie zu erzaehlen hat: Politik, das
+	# Revier des Gesuchten, ein Kopfgeld und ein Handelstipp. Jede dieser
+	# Zeilen kommt aus einer eigenen Bedingung, und ob sie zusammen noch
+	# lesbar untereinander stehen, sieht man nur im Bild.
+	GameState.add_notoriety(Bounty.HUNTED_FROM + 10)
+	# Genug Gold fuers Handgeld: Sonst zeigt die Aufnahme nur die Zeile fuer
+	# einen leeren Beutel, und der Nachlass auf den Ruf steht nirgends.
+	GameState.add_gold(900)
+	var pursuer := _hostile_nation(port.town.nation_id)
+	print("  Verfolger: %s" % pursuer)
+	port.show_section(port.Section.TAVERN)
+	await _wait(0.4)
+	await _shot("16_hafen_schenke")
+
+	# Und zurueck in den Palast: Nach dem Besuch in der Schenke steht dort das
+	# Revier, das vorher noch unbekannt war.
+	port.show_section(port.Section.GOVERNOR)
+	palace = port.panel as GovernorPanel
+	await _wait(0.4)
+	await _shot("17_hafen_revier")
+
+	var wanted: Adversary = GameState.commission.target
+	print("  Gesucht: %s" % wanted.title())
+	GameState.commission_target_defeated(wanted.captain_name, wanted.nation_id)
+	palace.refresh()
+	await _wait(0.4)
+	await _shot("18_hafen_bericht")
+
 	get_tree().quit(0)
+
+
+## Macht eine fremde Krone feindlich und gibt ihren Namen zurueck.
+##
+## Fuer die Warnung in der Schenke: Ein Kopfgeld setzt nur aus, wer feindlich
+## steht - ohne das bliebe die Zeile leer und die Aufnahme zeigte nicht, wie
+## sie neben den uebrigen Geruechten wirkt.
+func _hostile_nation(except_id: int) -> String:
+	for nation: NationData in WorldData.nations:
+		if nation.id == except_id:
+			continue
+		while GameState.standing_with(nation.id) != Standing.Level.HOSTILE:
+			GameState.change_reputation(nation.id, -10)
+		return nation.display_name
+	return "niemand"
 
 
 ## Die groesste Stadt der Welt - sie hat die meisten Waren im Angebot.

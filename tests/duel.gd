@@ -287,6 +287,13 @@ func _duel(
 
 	var theirs := _make_ship(defender_path)
 	theirs.ship_name = "Beute"
+	# Seit M6 kaempft ein Kapitaen nur mit Grund. Ohne feindliches Verhaeltnis
+	# floh der Verteidiger, statt sich zu stellen - "liegt an" fiel damit von
+	# 55 auf 9 Prozent, und aus dem Messduell wurde eine Verfolgungsjagd. Der
+	# Messlauf soll das System messen, nicht an ihm vorbeilaufen.
+	theirs.nation_id = GameState.Nation.SPAIN
+	while GameState.standing_with(theirs.nation_id) != Standing.Level.HOSTILE:
+		GameState.change_reputation(GameState.Nation.SPAIN, -10)
 	# Laengsseits auf wirksamem Abstand - die Lage, in der ein Gefecht wirklich
 	# beginnt. Nicht START_RANGE wie im spielbaren Duell: Das Aufschliessen davor
 	# dauert bei vier Knoten Vorsprung ueber eine Minute und wuerde die Haelfte

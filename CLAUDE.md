@@ -55,11 +55,11 @@ Genau so ist der Kompass einmal unbemerkt verschwunden.
 
 ```bash
 godot --path . res://tests/capture_sailing.tscn   # Segelmodus, 6 Aufnahmen + Bildrate/Chunk-Zahl
-godot --path . res://tests/capture_battle.tscn    # Seegefecht: Sichtung, längsseits, Salve, Einschlag, Prise
+godot --path . res://tests/capture_battle.tscn    # Seegefecht: Sichtung, längsseits, Salve, Einschlag, Prise, Jäger
 godot --path . res://tests/capture_ship.tscn      # Schiffsmodell aus vier Winkeln
 godot --path . res://tests/capture_island.tscn    # Küste: normal, ohne Dunst, ohne Wasser, Drahtgitter
 godot --path . res://tests/capture_town.tscn      # Siedlung aus drei Abständen
-godot --path . res://tests/capture_port.tscn      # Hafenbildschirm: Markt, nach Kauf, Werft
+godot --path . res://tests/capture_port.tscn      # Hafen: Markt, Kauf, Werft, Palast, Auftrag, Schenke
 ```
 
 PNG-Ablage: `~/.local/share/godot/app_userdata/PirateGame/captures/`. **Nach jeder sichtbaren
@@ -120,8 +120,15 @@ Rauchtest ohne Fenster läuft:
 | `Gunnery` | Ballistik: Richten, Vorhalten, Streuung, Trefferentscheid, Aufgeben |
 | `TargetProfile` | Was die Ballistik über ein Ziel weiß: Position, Fahrt, Kurs, Maße |
 | `Boarding` | Der Enterkampf: Stärke, Siegchance, Verluste |
+| `Standing` | Was eine Nation vom Spieler hält — und was daraus folgt |
+| `Diplomacy` | Wer mit wem Krieg führt — aus Seed und Spieltag gerechnet, nicht gehalten |
+| `LetterOfMarque` | Der Kaperbrief: wer ihn ausstellt, was er deckt, was er kostet |
+| `Adversary` | Ein benannter Kapitän auf einem bestimmten Schiff — die Grundlage von Auftrag und Kopfgeld |
+| `Commission` | Der Auftrag des Gouverneurs: Steckbrief, Frist, Lohn |
+| `Bounty` | Wann eine Krone einen Jäger schickt, auf welchem Schiff und mit wieviel Gold |
 | `ShipAI` | Die Entscheidungen eines KI-Kapitäns (statisch), der Node reicht sie nur weiter |
 | `TradeMath` | Preisbildung aus Lagerbestand |
+| `Tavern` | Handgeld und Gerede: was ein Mann kostet, was man sich erzählt |
 | `OceanWaves` | Wellenfeld — **doppelt vorhanden**, siehe unten |
 | `TerrainChunk` | Chunk-Meshbau und die gezeichnete Oberflächenhöhe |
 | `Palette` | Alle Farben des Spiels |
@@ -192,6 +199,200 @@ davon (`NavalCombat._release`). Das ist eine Lücke, kein Entwurf: Das Prisensch
 — *ein* Schiff gegen das eigene tauschen ist M5, *mehrere* Schiffe führen ist 5.4 und
 Tier 2.
 
+### Der Ruf entscheidet, wer schießt
+
+**Bis M6 griff jede Patrouille jeden an.** Ansehen wurde geführt (`GameState.reputation`,
+−100 bis +100 je Nation) und von Prisen verändert, aber **nichts las es je aus** — ebenso
+wenig `NationData.aggression` und `reputation_sensitivity`, die seit M2 in allen vier
+`.tres`-Dateien stehen.
+
+`Standing` beantwortet drei Fragen, alle nodefrei und ohne Szene prüfbar:
+
+| Frage | Antwort |
+|---|---|
+| `port_open(level)` | Erst bei **feindlich** macht der Hafen zu, nicht schon beim Misstrauen |
+| `hunts_player(level, aggression)` | Feindlich: immer. Misstrauisch: nur eine Nation, die schnell zur Sache kommt |
+| `weighted_change(amount, sensitivity)` | Spanien (1,2) nimmt dieselbe Prise schwerer als die Niederlande (0,8) |
+
+**Ein Kapitän braucht einen Grund.** `ShipAI.wants_battle()` ist `hostile or provoked`, und
+**beide** Fragen hängen daran: der Gefechtskurs (`stance`) *und* das Feuer (`_shoot`). Als
+die getrennt gerechnet wurden, floh ein provozierter Kapitän und schoss dabei — er lief
+davon und feuerte nach hinten. `hostile` setzt `NavalCombat` aus dem Ruf, `provoked` das
+Beschossenwerden.
+
+Ein Handelsschiff jagt nie, auch wenn seine Krone den Spieler sucht — es flieht und wehrt
+sich nur.
+
+### Der Kaperbrief ist die Gegenrichtung
+
+Der Ruf konnte danach immer noch nur **fallen**. Jede Prise kostete Ansehen, nichts brachte
+je welches ein — wer lange genug spielte, stand irgendwann bei allen vier Kronen unten und
+hatte keinen Hafen mehr. `LetterOfMarque` macht daraus eine Entscheidung: Wer einen Brief
+trägt, dem schreibt seine Krone jede Prise gegen ihren **Kriegsgegner** gut (+5).
+
+| | |
+|---|---|
+| Ausgestellt ab | *gleichgültig* — nicht erst ab *wohlgesonnen*, sonst wäre er ein Preis dafür, das System schon zu kennen |
+| Ausgestellt wo | Stadt oder Hauptstadt (`has_seat`). Ein Dorf hat keinen Gouverneur |
+| Kostet | kein Gold, sondern −5 Ansehen bei **jeder** der übrigen drei Kronen |
+| Davon gibt es | genau einen. Vier Briefe wären vier Freunde und keine Wahl |
+
+**Der Seitenwechsel braucht keine eigene Regel.** Wer einen zweiten Brief annimmt, dessen
+bisheriger Patron ist ab dem Moment eine der übrigen Kronen und bucht denselben Verlust wie
+sie — ein Wechsel kostet damit von selbst mehr als der erste Brief.
+
+**Zurückgeben ist frei, Verrat nicht.** Einen Auftrag niederzulegen schadet niemandem.
+Wer dagegen das Schiff des eigenen Auftraggebers aufbringt, verliert den Brief auf der
+Stelle und zahlt obendrauf (−12).
+
+**Unterm Strich bleibt Kapern ein Verlust:** Der Patron schreibt +5 gut, der Bestohlene
+bucht −8 ab. Der Brief verschiebt nur, *wo* der Verlust anfällt. Ohne dieses Gefälle wäre
+er ein Freibrief statt einer Entscheidung — der Rauchtest hält es fest.
+
+**Gedeckt ist genau eine Flagge, und welche, steht nicht fest.** Bis M6 deckte der Brief
+alles außer der eigenen Krone — das ist ein Freibrief und keine Entscheidung. Seit es
+Kriege gibt (`Diplomacy`, unten), deckt er den Kriegsgegner des Patrons und sonst niemanden.
+Damit sucht man sich mit dem Patron zugleich sein Jagdrevier aus — und ein Friedensschluss
+verschiebt es, ohne dass man etwas getan hätte.
+
+Die Regel selbst (`LetterOfMarque.covers`) bekommt den Gegner als Parameter und schlägt ihn
+nicht selbst nach — sie soll ohne Welt und ohne Uhr prüfbar bleiben (Regel B3). Wer mit dem
+laufenden Spiel fragt, nimmt `GameState.letter_covers()`; Anzeige und Buchung fragen
+dieselbe Funktion, sonst schreibt das HUD „wird gutgeschrieben" über eine Prise, die
+niemand gutschreibt.
+
+Sichtbar an drei Stellen (Regel A8): im **Gouverneurspalast** (`ui/port/governor_panel.gd`),
+in der **Legende der Seekarte** neben der Nation, für die man fährt, und in der
+**Prisenmeldung** auf See.
+
+### Der Auftrag ist der Grund, der Brief nur die Erlaubnis
+
+Der Kaperbrief zählte seine Prisen mit, und **die Zahl hing an nichts.** Ein Auftrag ist
+das, woran sie hängt: Der Gouverneur der eigenen Patronskrone hängt einen Steckbrief aus —
+Kapitän, Schiff, Flagge, acht Spieltage Frist.
+
+**Bezahlt wird an Land.** Wer den Benannten aufgebracht *oder versenkt* hat, muss zurück in
+eine Stadt seiner Krone und Bericht erstatten (`GameState.report_commission`). Das ist die
+erste Schleife im Spiel, die nicht auf See endet — und der erste Anlass, einen *bestimmten*
+Hafen anzulaufen statt des nächstbesten.
+
+| | |
+|---|---|
+| Voraussetzung | Ein Kaperbrief dieser Krone. Ohne ihn vergibt kein Gouverneur etwas |
+| Bringt | Gold (400 → 2400, steigt mit jedem Bericht) und **+10 Ansehen** beim Patron |
+| Kostet ein Fehlschlag | −4 beim Patron. Ohne Gegenseite wäre die Annahme ein Knopf ohne Entscheidung |
+| Ziel ab dem dritten | Eine **Fregatte** (`resources/ships/frigate.tres`) — vierzehn Rohre, dreht träge |
+
+**Der Auftrag ist die einzige Tat, bei der das Ansehen unterm Strich steigt.** Bloßes
+Kapern unter dem Brief bleibt ein Verlust (+5 gegen −8); der Auftrag steht bei +10 gegen
+−8. Der Unterschied ist der zwischen *geduldet* und *beauftragt* — und die Bezahlung dafür,
+gegen ein Kriegsschiff zu fahren statt gegen einen Frachter. Bei +8 wäre es ein
+Nullsummenspiel gewesen, das erst die Gutschrift des Briefs zum Gewinn macht; der Rauchtest
+hält jetzt das Einfache fest.
+
+**Der Steckbrief wird gerechnet, nicht gehalten.** Der Würfel hängt an Seed, Krone und der
+Zahl der *eingelösten* Aufträge (`Commission.offer`). Damit steht bei jedem Blick derselbe
+Mann da, ohne gespeichertes Angebot — und wer eine Frist verstreichen lässt, bekommt
+denselben Mann noch einmal ausgeschrieben. Ein Gesuchter bleibt gesucht, bis ihn jemand
+bringt.
+
+**Der Brief trägt den Auftrag.** Rückgabe oder Seitenwechsel lassen einen offenen Auftrag
+liegen und werden angerechnet — sonst wäre die Rückgabe der Schlupfweg aus jeder Frist.
+Beim Einzug nach Verrat entfällt die zweite Rechnung: `BETRAYAL_COST` hat sie schon bezahlt.
+
+### Und dieselbe Mechanik von der anderen Seite
+
+`Bounty` ist `Commission` mit umgekehrtem Steckbrief. Beide setzen denselben `Adversary` —
+einen Kapitän mit Namen, absichtlich gesetzt statt aus dem Zufall gespült
+(`NavalCombat._place_named`; höchstens einer gleichzeitig, und er zählt nicht gegen
+`max_ships`).
+
+**Berüchtigtheit kostet zum ersten Mal etwas.** Sie wuchs seit M4 mit jeder Prise und sank
+nie, tat aber nur eines: Gegner strichen früher die Flagge. Ab 35 Punkten schickt eine
+**feindliche** Krone einen benannten Jäger — nicht schon eine misstrauische, die schickt
+ohnehin Patrouillen. Ab 65 kommt er auf einer Fregatte.
+
+**Sein Vorschuss ist das eigene Kopfgeld** (`Bounty.purse`). Damit ist der Mann, den man am
+wenigsten treffen will, zugleich die beste Prise auf See. Nach einem erledigten Jäger sind
+vier Minuten Ruhe, sonst käme ein berüchtigter Kapitän nie mehr zum Handeln.
+
+**Ein Auftragsziel wird erkannt, nicht wiedergefunden.** `Adversary.is_ship()` vergleicht
+Name und Flagge, nicht die Objektidentität: Zwischen Annahme und Treffen liegen Häfen und
+Szenenwechsel, und der Node von vorhin ist dann längst weg.
+
+### Vier Kronen, zwei Kriege
+
+`Diplomacy` ist der einzige neue **Weltzustand** aus M6 — und trotzdem steht er in keinem
+Spielstand: Die Lage ist eine reine Funktion aus Weltseed und Spieltag, genau wie der
+Steckbrief im Palast.
+
+**Zu jeder Zeit liegt jede Krone mit genau einer anderen im Krieg.** Vier Nationen lassen
+sich auf genau drei Arten so paaren; die Lage ist immer eine dieser drei. Das ist an beiden
+Enden enger als „jeder gegen jeden nach Würfel", und das mit Absicht:
+
+- Ein **allgemeiner Friede** schaltete Kaperbrief und Auftrag ab, also das halbe Spiel — und
+  der Spieler hätte nichts in der Hand dagegen.
+- Ein **allgemeiner Krieg** wäre der Zustand von vorher: ein Brief, der alles deckt.
+
+Die Paarung ist die interessante Mitte. Der Brief deckt genau eine Flagge, und welche das
+ist, sucht man sich mit dem Patron aus.
+
+| | |
+|---|---|
+| Wechselt alle | 24 Spieltage (`ERA_DAYS`) — dreimal die Frist eines Auftrags, damit ein Krieg die Jagd überdauert, die unter ihm begonnen wurde |
+| Und dann | **wirklich**: Der Schritt durch die drei Lagen ist immer eins oder zwei, nie null. Jede Krone bekommt dabei einen anderen Feind |
+| Wirkt auf | was der Kaperbrief deckt (`LetterOfMarque.covers`) und wen der Gouverneur ausschreibt (`Commission.offer`) |
+
+**Ein laufender Auftrag überlebt den Friedensschluss.** Der Gouverneur hat den Mann
+ausgeschrieben, und ein Steckbrief wird nicht dadurch gegenstandslos, dass die Kronen sich
+vertragen — im Gegenteil: Wer danach weiterkapert, ist für beide Seiten ein Pirat. Die
+Alternative wäre gewesen, ihn zu annullieren; dann verlöre etwa jeder dritte Auftrag durch
+einen Würfel, den der Spieler nicht sieht.
+
+Sichtbar an drei Stellen (Regel A8): in der **Zeile über der Seekarte** (wer gegen wen), im
+**Gouverneurspalast** (was der Brief deshalb deckt), in der **Schenke** (dasselbe als
+Gerede) — und als **Meldung im HUD** an dem Tag, an dem neu verhandelt wird. Ohne die
+Meldung fände man erst beim nächsten Aufbringen heraus, dass der Brief eine andere Flagge
+deckt als gestern.
+
+### Die Schenke ist, wo man erfährt, wohin
+
+Der vierte Hafenbildschirm (`ui/port/tavern_panel.gd`). Zwei Dinge stehen dort:
+
+**Anheuern**, aus der Werft hierher gezogen — der Kommentar dort sagte seit M4 selbst, dass
+es nicht dorthin gehört. Die Rechnung ist dieselbe geblieben und hat einen zweiten Grund
+bekommen: **Berüchtigtheit senkt das Handgeld** (`Tavern.FAME_DISCOUNT`, bis zu einem
+Drittel). Das ist die erste Folge dieser Achse, die dem Spieler *nützt* — bis dahin hat sie
+ihm nur Jäger geschickt. Eine Achse, die nur kostet, ist so wenig eine Entscheidung wie
+eine, die nur hilft.
+
+**Das Gerede**, und das ist der eigentliche Grund für den Bildschirm. Ein Auftragsziel wurde
+bis M6 einfach in Sichtweite gesetzt, egal wo man fuhr — man konnte einen Auftrag nicht
+*suchen*, nur abwarten:
+
+| Gerücht | Wann |
+|---|---|
+| Politik | immer — wer mit wem Krieg führt, und was der eigene Brief deshalb deckt |
+| Der Gesuchte | mit laufendem Auftrag: **vor welchem Hafen er kreuzt** |
+| Der Jäger | wenn eine feindliche Krone ein Kopfgeld ausgesetzt hat (`Bounty.due`) |
+| Handel | welche Ware von hier in einem Nachbarhafen gut bezahlt wird (`Tavern.trade_tip`) |
+| Über dich | ab 15 Punkten Berüchtigtheit |
+
+**Der Gesuchte kreuzt jetzt irgendwo.** Bei der Annahme wird sein Revier festgelegt
+(`Commission.waters_for`): der Hafen seiner eigenen Flagge, der dem Ort der Zusage am
+nächsten liegt. `NavalCombat` setzt ihn nur innerhalb von 3000 m davon (`WATERS_RANGE`,
+deutlich mehr als `DESPAWN_DISTANCE` — sonst führe man ihm während der Verfolgung aus
+seinem eigenen Revier heraus); außerhalb bleibt der Platz frei und der Kopfgeldjäger rückt
+nach.
+
+**Das Revier steht nicht auf dem Steckbrief.** Der Palast sagt, *wer* gesucht wird, und
+verweist auf die Schenke; der Wirt sagt, *wo*. Erst danach steht der Ort auf der Seekarte
+(`Commission.waters_known` — das einzige Bit Zustand, das der Besuch hinterlässt). Ohne
+diese Trennung wäre die Schenke ein Bildschirm, den niemand je öffnen müsste.
+
+Ohne Revier — ein Auftrag aus einem Spielstand vor Version 5, oder einer, der außerhalb
+eines Hafens angenommen wurde — kreuzt er überall, also genau wie vorher.
+
 ### Drei Aufforderungen, eine Taste
 
 Prise, Entern und Anlegen liegen alle auf der Leertaste und teilen sich eine Zeile im HUD.
@@ -245,12 +446,17 @@ Dazu prüft `_check_everything_loads()`, dass jedes Skript wirklich *kompiliert*
 liefert bei einem Parse-Fehler trotzdem ein Objekt zurück, nur eben ein nicht kompiliertes;
 `can_instantiate()` unterscheidet das.
 
-## Zwei Godot-Fallen, die niemand sieht
+## Vier Godot-Fallen, die niemand sieht
 
 - **Vertex-Farben sind linear, nicht sRGB.** Für Mesh-Arrays immer `Palette.for_vertex()`,
   sonst sehen die Inseln aus wie Schneefelder.
 - **Transform-Basen stehen in `.tscn` zeilenweise.** Eine spaltenweise gerechnete
   Rotationsmatrix landet dort transponiert — also als ihre Umkehrung.
+- **`custom_minimum_size` ist eine Untergrenze, keine Obergrenze.** Ein umbrechendes Label
+  in einem dehnbaren Container nimmt sich die ganze Breite. Für Lesebreite zusätzlich
+  `size_flags_horizontal = Control.SIZE_SHRINK_BEGIN`.
+- **`queue_free()` wirkt erst am Bildende.** Ein KI-Kapitän entscheidet in der Lücke noch
+  einmal — und feuert. Erst `set_physics_process(false)`, dann freigeben.
 
 ## Beim Bauen
 

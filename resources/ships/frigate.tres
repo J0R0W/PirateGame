@@ -1,0 +1,23 @@
+[gd_resource type="Resource" script_class="ShipClass" load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://data/ship_class.gd" id="1_ship_class"]
+
+[resource]
+script = ExtResource("1_ship_class")
+id = &"frigate"
+display_name = "Fregatte"
+description = "Das schwerste, was eine Krone auf Streife schickt. Sie dreht träge und läuft keiner Schaluppe davon — aber sie muss auch nicht, denn wer ihr längsseits gerät, bekommt sieben Rohre auf einmal."
+max_hull = 180
+max_sails = 150
+base_speed = 10.5
+turn_rate_deg = 20.0
+speed_inertia = 7.0
+turn_inertia = 2.2
+cannon_slots = 14
+gun_traverse = 20.0
+cargo_capacity = 60
+min_crew = 30
+max_crew = 90
+base_price = 9000
+warship = true
+hull_scale = 2.2

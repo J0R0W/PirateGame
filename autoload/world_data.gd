@@ -65,6 +65,14 @@ const ECONOMY_STEP_MINUTES: float = 120.0
 ## GameState - es gibt nur eine Uhr, und die Welt liest sie mit.
 var _last_economy_minutes: float = 0.0
 
+## Der zuletzt gemeldete politische Zeitabschnitt (siehe [Diplomacy]).
+##
+## Nur zum Vergleich beim Tageswechsel, nicht als Wahrheit: Welche Kronen
+## einander bekriegen, faellt jederzeit aus Seed und Spieltag heraus. Hier
+## steht ausschliesslich, was der Spieler davon schon erfahren hat - deshalb
+## wird das Feld auch nicht gespeichert.
+var _diplomacy_era: int = 0
+
 ## Zielwerte, auf die Richtung und Staerke langsam zulaufen.
 var _wind_target_direction: float = 0.0
 var _wind_target_strength: float = 1.0
@@ -74,6 +82,12 @@ var _wind_shift_timer: float = 0.0
 const WIND_SHIFT_INTERVAL: float = 45.0
 ## Wie schnell der Wind seinem Zielwert folgt.
 const WIND_LERP_SPEED: float = 0.15
+
+
+## Die politische Uhr laeuft am Tageswechsel, nicht am Bild: Ein
+## Friedensschluss ist ein Ereignis des Kalenders.
+func _ready() -> void:
+	EventBus.day_passed.connect(_on_day_passed)
 
 
 func _process(delta: float) -> void:
@@ -141,6 +155,7 @@ func generate(new_seed: int) -> void:
 
 	generated = true
 	reset_economy_clock()
+	reset_political_clock()
 
 
 ## Setzt die Wirtschaftsuhr auf den jetzigen Spielzeitpunkt.
@@ -148,6 +163,23 @@ func generate(new_seed: int) -> void:
 ## Differenz zwischen zwei Spielstaenden in einem Schritt nach.
 func reset_economy_clock() -> void:
 	_last_economy_minutes = GameState.game_minutes
+
+
+## Setzt die politische Uhr auf den jetzigen Spieltag.
+##
+## Noetig nach dem Laden und nach dem Erzeugen einer Welt: Sonst meldet der
+## naechste Tageswechsel eine Umwaelzung, die schon vor dem Speichern
+## stattgefunden hat.
+func reset_political_clock() -> void:
+	_diplomacy_era = Diplomacy.era_of(GameState.current_day())
+
+
+func _on_day_passed(day: int) -> void:
+	var era := Diplomacy.era_of(day)
+	if era == _diplomacy_era:
+		return
+	_diplomacy_era = era
+	EventBus.treaties_changed.emit(day)
 
 
 func _load_nations() -> void:
@@ -172,6 +204,29 @@ func get_nation(nation_id: int) -> NationData:
 		if nation.id == nation_id:
 			return nation
 	return null
+
+
+# --- Politik ---------------------------------------------------------------
+#
+# Die Lage selbst steht in [Diplomacy] und ist eine reine Rechnung aus Seed und
+# Spieltag. Hier stehen nur die drei Fragen, die das laufende Spiel daran hat -
+# damit nicht jeder Aufrufer Seed und Uhr selbst zusammensuchen muss. Dass die
+# Welt dafuer die Uhr aus GameState liest, ist dasselbe wie bei der Wirtschaft:
+# Es gibt nur eine Uhr.
+
+## Mit welcher Krone diese gerade Krieg fuehrt, oder -1.
+func enemy_of(nation_id: int) -> int:
+	return Diplomacy.enemy_of(world_seed, GameState.current_day(), nation_id)
+
+
+## Liegen diese beiden gerade im Krieg?
+func at_war(a: int, b: int) -> bool:
+	return Diplomacy.at_war(world_seed, GameState.current_day(), a, b)
+
+
+## Die beiden Kriege, die gerade laufen - fuer Seekarte und Schenke.
+func wars() -> Array[Vector2i]:
+	return Diplomacy.wars(world_seed, GameState.current_day())
 
 
 ## Ab dieser Entfernung zur Stadt laesst sich anlegen.

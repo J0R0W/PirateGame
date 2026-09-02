@@ -8,7 +8,10 @@ extends Node
 const SAVE_DIR: String = "user://saves"
 ## Bei Formataenderungen erhoehen und in _migrate() behandeln.
 ## 2: Schiff, Laderaum und die Lagerbestaende der Staedte kamen dazu.
-const SAVE_VERSION: int = 2
+## 3: der Kaperbrief.
+## 4: der Auftrag des Gouverneurs.
+## 5: das Revier des Gesuchten.
+const SAVE_VERSION: int = 5
 
 
 func _ready() -> void:
@@ -32,6 +35,14 @@ func save_slot(slot: int) -> bool:
 			"gold": GameState.gold,
 			"crew": GameState.crew,
 			"notoriety": GameState.notoriety,
+			"letter_nation": GameState.letter_nation,
+			"letter_prizes": GameState.letter_prizes,
+			"commissions_done": GameState.commissions_done,
+			# Der angenommene Auftrag als Ganzes, das offene Angebot nicht: Das
+			# faellt aus Seed, Krone und commissions_done wieder heraus
+			# (GameState.commission_offer) und waere im Spielstand eine zweite
+			# Wahrheit ueber dieselbe Sache.
+			"commission": GameState.commission.to_dict() if GameState.commission != null else {},
 			# JSON kennt nur String-Keys - Enum-Keys werden beim Laden zurueckgewandelt.
 			"reputation": _keys_to_strings(GameState.reputation),
 			"game_minutes": GameState.game_minutes,
@@ -94,14 +105,21 @@ func load_slot(slot: int) -> bool:
 	GameState.gold = int(player.get("gold", 500))
 	GameState.crew = int(player.get("crew", 20))
 	GameState.notoriety = int(player.get("notoriety", 0))
+	GameState.letter_nation = int(player.get("letter_nation", LetterOfMarque.NONE))
+	GameState.letter_prizes = int(player.get("letter_prizes", 0))
+	GameState.commissions_done = int(player.get("commissions_done", 0))
+	var order: Dictionary = player.get("commission", {})
+	GameState.commission = Commission.from_dict(order) if not order.is_empty() else null
 	GameState.game_minutes = float(player.get("game_minutes", 0.0))
 	for key: String in player.get("reputation", {}):
 		GameState.reputation[int(key)] = int(player["reputation"][key])
 
 	_load_ship(data.get("ship", {}))
 	_apply_town_overrides(world.get("town_overrides", {}))
-	# Die Wirtschaft darf die Pause zwischen zwei Sitzungen nicht nachholen.
+	# Die Wirtschaft darf die Pause zwischen zwei Sitzungen nicht nachholen,
+	# und die Politik keine Umwaelzung melden, die vor dem Speichern lag.
 	WorldData.reset_economy_clock()
+	WorldData.reset_political_clock()
 
 	return true
 
@@ -155,19 +173,29 @@ func delete_slot(slot: int) -> void:
 
 
 ## Hebt aeltere Spielstaende auf das aktuelle Format an.
+##
+## Schrittweise und ohne return dazwischen: Mit dem zweiten Format wurde aus
+## dem einen Sonderfall eine Kette, und ein Spielstand der Version 1 muss beide
+## Schritte durchlaufen, nicht nur den ersten.
 func _migrate(data: Dictionary) -> Dictionary:
 	var version := int(data.get("version", 0))
 	if version == SAVE_VERSION:
 		return data
-	if version == 1:
+	if version < 1 or version > SAVE_VERSION:
+		push_warning("SaveManager: Spielstand hat Version %d, erwartet %d" % [version, SAVE_VERSION])
+		return data
+
+	if version < 2:
 		# Version 1 kannte weder Schiff noch Lagerbestaende. Die fehlenden
 		# Abschnitte bleiben leer - die Ladefunktion faellt dann auf die
 		# Startwerte und die frisch erzeugte Wirtschaft zurueck.
 		data["ship"] = {}
-		data["version"] = SAVE_VERSION
-		return data
+	# Version 2 kannte den Kaperbrief nicht, Version 3 den Auftrag nicht,
+	# Version 4 sein Revier nicht. Jedes Mal ist nichts zu tun: Ein fehlendes
+	# Feld heisst "keiner" beziehungsweise "ueberall", und genau darauf faellt
+	# die Ladefunktion zurueck (siehe Commission.from_dict).
 
-	push_warning("SaveManager: Spielstand hat Version %d, erwartet %d" % [version, SAVE_VERSION])
+	data["version"] = SAVE_VERSION
 	return data
 
 
