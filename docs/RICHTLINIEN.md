@@ -181,7 +181,7 @@ Nicht jede Drehung um die Hochachse ist ein Kurs: Ein Haus steht schräg, es fä
 Solche Zeilen tragen `# kein Kurs` und behaupten die Ausnahme damit ausdrücklich — die
 Prüfung akzeptiert nur diesen Vermerk, kein stilles Übergehen.
 
-### B8. Zwei Godot-Fallen, die niemand sieht
+### B8. Vier Godot-Fallen, die niemand sieht
 
 **Vertex-Farben sind linear, nicht sRGB.** Godot 4 interpretiert Farben in Mesh-Arrays als
 linear. Eine sRGB-Palette wirkt dort ausgewaschen — die Inseln sahen aus wie Schneefelder.
@@ -191,6 +191,22 @@ Für Vertex-Farben immer `Palette.for_vertex()`.
 Rotationsmatrix landet transponiert in der Szene, und die Transponierte einer Rotation ist
 ihre Umkehrung. So zeigte der Klüverbaum nach unten. Gedrehte Transforms werden mit
 `tests/capture_ship.tscn` nachgeprüft.
+
+**`custom_minimum_size` ist eine Untergrenze, keine Obergrenze.** Ein Label mit
+`autowrap_mode` in einem Container, der sich dehnt, nimmt sich die ganze verfügbare Breite —
+der erste Absatz im Gouverneurspalast lief über anderthalbtausend Pixel in einer einzigen
+Zeile. Technisch richtig, nicht mehr lesbar. Wer Lesebreite will, setzt zusätzlich
+`size_flags_horizontal = Control.SIZE_SHRINK_BEGIN`; dann gilt die Mindestbreite als
+tatsächliche Breite. Gefunden nur im Bild — headless ist ein Umbruch unsichtbar
+([C2](#c2-was-man-nicht-rendert-hat-man-nicht-geprüft)).
+
+**`queue_free()` wirkt erst am Bildende, und ein Takt reicht für eine Entscheidung.**
+Zwischen dem Aufruf und dem tatsächlichen Freigeben liegt mindestens ein
+`_physics_process`. Ein KI-Kapitän, der genau in dieser Lücke einmal entscheidet, tut
+alles, was er sonst auch täte: Die Fregatte der Sichtprüfung gab eine volle Breitseite ab,
+nachdem ihr Kapitän schon abgeräumt war, und die Aufnahme zeigte statt ihrer Silhouette den
+eigenen Pulverdampf. Wer einen Node stilllegen will, legt ihn **erst** still
+(`set_physics_process(false)`) und gibt ihn **dann** frei.
 
 ### B9. Geländeflächen rendern beidseitig
 
