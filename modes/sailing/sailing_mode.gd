@@ -18,6 +18,7 @@ const GROUNDING_DAMAGE_PER_KNOT: float = 1.6
 @onready var _ocean: Ocean = $Ocean
 @onready var _hud: Control = $HUD
 @onready var _sun: DirectionalLight3D = $Sun
+@onready var _environment: Environment = $WorldEnvironment.environment
 @onready var _map: Control = $WorldMap
 @onready var _terrain: Node3D = $Terrain
 @onready var _towns: TownMarkers = $Towns
@@ -57,17 +58,38 @@ func _ready() -> void:
 	_map.ship = _ship
 	_debug.setup(_ship, _combat, _ocean)
 
-	# TODO(M7): Sonnenstand aus GameState.time_of_day() ableiten.
-	_sun.rotation_degrees = Vector3(-52.0, -35.0, 0.0)
+	_update_skylight()
 
 
 func _process(_delta: float) -> void:
+	_update_skylight()
 	_update_dock_target()
 	_update_prize_target()
 	_update_boarding_target()
 	# Die Kamera rahmt das Gefecht ein, statt stur nach vorn zu sehen -
 	# querab liegt sonst ausserhalb des Bildes.
 	_camera_rig.focus = _combat.nearest_enemy(_camera_rig.focus_range)
+
+
+## Schreibt den Himmel in die Szene: Sonnenstand, Licht, Dunst.
+##
+## Je Bild, weil ein Spieltag nur vier Minuten dauert und die Sonne sichtbar
+## wandert. Gerechnet wird nichts hier - alles kommt aus [Skylight], damit
+## Aufnahmen und Rauchtest dieselben Zahlen bekommen wie das Spiel.
+##
+## Die Sonne wird ueber ihre Basis gestellt, nicht ueber rotation.y: Eine
+## Lichtrichtung ist kein Kurs (Regel B7), und Basis.looking_at spart die
+## Frage, in welcher Reihenfolge Euler-Winkel angewandt werden.
+func _update_skylight() -> void:
+	var t := GameState.time_of_day()
+	var weather := WorldData.weather
+	_sun.basis = Basis.looking_at(Skylight.light_direction(t))
+	_sun.light_energy = Skylight.light_energy(t, weather)
+	_sun.light_color = Skylight.light_colour(t)
+	_environment.ambient_light_energy = Skylight.ambient_energy(t)
+	_environment.background_energy_multiplier = Skylight.sky_energy(t)
+	_environment.fog_density = Skylight.fog_density(weather)
+	_environment.fog_light_color = Skylight.fog_colour(t)
 
 
 ## Uebertraegt Schiffsklasse und Zustand auf das sichtbare Schiff.

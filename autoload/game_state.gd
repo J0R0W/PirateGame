@@ -12,6 +12,8 @@ enum Nation { SPAIN, ENGLAND, FRANCE, NETHERLANDS }
 ## hatten nie Zeit, sich zu erholen, und Handel bestand nur aus dem eigenen
 ## Preisdruck.
 const MINUTES_PER_SECOND: float = 6.0
+## Uhrzeit beim Kampagnenstart, in Spielminuten seit Mitternacht.
+const START_MINUTES: float = 8.0 * 60.0
 
 ## Startausruestung einer neuen Kampagne.
 const STARTING_SHIP: String = "res://resources/ships/sloop.tres"
@@ -495,7 +497,10 @@ func new_campaign(captain: String, world_seed: int) -> void:
 	letter_prizes = 0
 	commission = null
 	commissions_done = 0
-	game_minutes = 0.0
+	# Acht Uhr morgens, nicht Mitternacht. Solange die Sonne feststand, war
+	# der Startwert gleichgueltig; seit sie wandert, begaenne jede Kampagne
+	# sonst im Dunkeln - und der erste Eindruck waere eine schwarze See.
+	game_minutes = START_MINUTES
 	_last_day = 0
 	for nation in reputation:
 		reputation[nation] = 0

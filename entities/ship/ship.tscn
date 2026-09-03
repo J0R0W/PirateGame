@@ -1,6 +1,9 @@
-[gd_scene load_steps=13 format=3]
+[gd_scene load_steps=16 format=3]
 
 [ext_resource type="Script" path="res://entities/ship/ship.gd" id="1_ship"]
+[ext_resource type="Script" path="res://entities/ship/models/rig.gd" id="2_rig"]
+[ext_resource type="Script" path="res://entities/ship/models/flag.gd" id="3_flag"]
+[ext_resource type="Script" path="res://entities/ship/models/lantern.gd" id="4_lantern"]
 
 [sub_resource type="BoxShape3D" id="Shape_hull"]
 size = Vector3(2.6, 1.4, 8)
@@ -88,6 +91,17 @@ surface_material_override/0 = SubResource("Mat_wood")
 
 [node name="Mast" type="Node3D" parent="Hull"]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0.76, 0.4)
+script = ExtResource("2_rig")
+rest_chord_deg = 90.0
+max_swing_deg = 72.0
+
+[node name="Flag" type="Node3D" parent="Hull"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 8.95, 0.4)
+script = ExtResource("3_flag")
+
+[node name="Lantern" type="Node3D" parent="Hull"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 1.78, 3.85)
+script = ExtResource("4_lantern")
 
 [node name="MastMesh" type="MeshInstance3D" parent="Hull/Mast"]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 4, 0)
@@ -99,7 +113,7 @@ transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 6.6, 0)
 mesh = SubResource("Mesh_spar")
 surface_material_override/0 = SubResource("Mat_wood")
 
-[node name="Sail" type="Node3D" parent="Hull/Mast"]
+[node name="Sail" type="Node3D" parent="Hull/Mast" groups=["sail"]]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 6.6, 0)
 
 [node name="SailMesh" type="MeshInstance3D" parent="Hull/Mast/Sail"]

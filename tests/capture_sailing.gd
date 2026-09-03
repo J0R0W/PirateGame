@@ -78,6 +78,25 @@ func _ready() -> void:
 	debug.toggle()
 	await _wait(1.0)
 	await _shot("06_debug")
+	debug.toggle()
+
+	# Abend und Nacht: Die Sonne muss tief stehen, der Dunst dunkel werden,
+	# und die Laterne am Heck brennen. Alles drei sieht man nur im Bild.
+	GameState.time_running = false
+	GameState.game_minutes = floorf(GameState.game_minutes / 1440.0) * 1440.0 + 17.5 * 60.0
+	await _wait(1.0)
+	await _shot("07_abend")
+	GameState.game_minutes += 4.5 * 60.0
+	await _wait(Lantern.FADE + 0.5)
+	await _shot("08_nacht")
+
+	# Regen am Mittag: Sicht 0.4, also Laterne an - im dichten Dunst.
+	GameState.game_minutes -= 10.0 * 60.0
+	WorldData.weather = WorldData.Weather.RAIN
+	await _wait(1.0)
+	await _shot("09_regen")
+	WorldData.weather = WorldData.Weather.CLEAR
+	GameState.time_running = true
 
 	get_tree().quit(0)
 

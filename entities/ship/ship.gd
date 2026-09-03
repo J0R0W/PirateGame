@@ -130,10 +130,34 @@ const STRIKE_STOP_INERTIA: float = 3.0
 ## Restliche Nachladezeit je Seite, Index 0 = Backbord, 1 = Steuerbord.
 var _reload: PackedFloat32Array = PackedFloat32Array([0.0, 0.0])
 
-@onready var _sail: Node3D = $Hull/Mast/Sail
+## Gruppe, in der ein Modell seine Segel anmeldet.
+##
+## Frueher stand hier ein fester Pfad ($Hull/Mast/Sail), weil jede Klasse
+## dasselbe Modell benutzte. Eine Karavelle hat drei Segel an drei Masten - der
+## Pfad haette nur das erste gefunden und die anderen waeren beim Reffen stehen
+## geblieben.
+const SAIL_GROUP: StringName = &"sail"
+
+## Alle Segel des gerade eingesetzten Modells.
+var _sails: Array[Node3D] = []
+## Alles, was zum Wind schwenkt: Rahen samt ihren Segeln.
+var _rigs: Array[Rig] = []
+## Die Flaggen des Schiffes. In der Regel eine, aber nichts verbietet zwei.
+var _flags: Array[Flag] = []
+## Die Laternen des Schiffes - und ob sie gerade brennen.
+##
+## Der Zustand steht hier und nicht nur in den Laternen, weil die Schwelle
+## zwei Werte hat (siehe [method Skylight.lanterns_lit]): Ob angezuendet oder
+## geloescht wird, haengt davon ab, was gerade ist.
+var _lanterns: Array[Lantern] = []
+var _lanterns_lit: bool = false
+## Unter welcher Flagge zuletzt gefahren wurde - damit die Farbe nicht in jedem
+## Bild neu gesetzt wird, sondern nur, wenn sich die Nation wirklich aendert.
+var _flying: int = -2
 
 
 func _ready() -> void:
+	_collect_rigging()
 	_update_sail_visual()
 
 
@@ -186,6 +210,17 @@ func _physics_process(delta: float) -> void:
 	move_and_slide()
 
 	_apply_swell(delta)
+
+
+## Rah und Flagge sind reine Anzeige und gehoeren deshalb ins Bild, nicht in
+## die Physik.
+##
+## Das ist kein Schoenheitsfehler, sondern noetig: Ein Schiff mit abgeschalteter
+## Physik - in einer Aufnahme, im Hafen, mit gestrichener Flagge - haette sonst
+## eine Rah, die irgendwo steht, und eine Flagge, die in keine Richtung weht.
+func _process(delta: float) -> void:
+	_update_rigging(delta)
+	_update_lanterns()
 
 
 ## Haelt das Schiff vor der Kueste an.
@@ -250,13 +285,91 @@ func _set_sail_step(step: int) -> void:
 
 ## Das Segel zeigt die Stellung direkt an - gerefft ist es schmaler.
 func _update_sail_visual() -> void:
-	if _sail == null:
-		return
 	var amount := SailingMath.SAIL_STEPS[sail_step]
-	var tween := create_tween()
-	tween.tween_property(_sail, "scale", Vector3(1.0, maxf(amount, 0.06), 1.0), 0.4) \
-		.set_trans(Tween.TRANS_CUBIC)
-	tween.parallel().tween_property(_sail, "visible", amount > 0.0, 0.0)
+	for sail: Node3D in _sails:
+		if sail == null:
+			continue
+		var tween := create_tween()
+		tween.tween_property(sail, "scale", Vector3(1.0, maxf(amount, 0.06), 1.0), 0.4) \
+			.set_trans(Tween.TRANS_CUBIC)
+		tween.parallel().tween_property(sail, "visible", amount > 0.0, 0.0)
+
+
+## Sammelt Segel, Rahen und Flaggen des gerade eingesetzten Modells ein.
+##
+## Segel ueber die Gruppe, Rahen und Flaggen ueber ihren Typ: Ein Modell darf
+## seine Masten nennen, wie es will, und muss nur sagen, was was ist.
+func _collect_rigging() -> void:
+	_sails.clear()
+	_rigs.clear()
+	_flags.clear()
+	_lanterns.clear()
+	_lanterns_lit = false
+	_flying = -2
+	var body := get_node_or_null("Hull")
+	if body == null:
+		return
+	for node: Node in body.find_children("*", "Node3D", true, false):
+		if node.is_in_group(SAIL_GROUP):
+			_sails.append(node as Node3D)
+		if node is Rig:
+			_rigs.append(node as Rig)
+		elif node is Flag:
+			_flags.append(node as Flag)
+		elif node is Lantern:
+			_lanterns.append(node as Lantern)
+
+
+## Stellt Rahen und Flaggen zum Wind.
+##
+## Beides haengt am selben Wind, wird aber verschieden gerechnet: Die Rah steht
+## zum Wind [i]relativ zum Schiff[/i] und dreht deshalb oertlich; die Flagge
+## steht in einer Weltrichtung und weiss vom Kurs ihres Traegers nichts.
+func _update_rigging(delta: float) -> void:
+	var course := heading()
+	for rig: Rig in _rigs:
+		rig.aim(course, WorldData.wind_direction, delta)
+
+	if _flags.is_empty():
+		return
+	if _flying != nation_id:
+		_flying = nation_id
+		var colour := _flag_colour()
+		for flag: Flag in _flags:
+			flag.raise(colour)
+	for flag: Flag in _flags:
+		flag.stream(WorldData.wind_direction, WorldData.wind_strength, delta)
+
+
+## Laesst die Laternen anzuenden oder loeschen, je nach Sicht.
+##
+## Jedes Schiff fuer sich, ohne Befehl: Ein Kapitaen macht bei Nacht und im
+## Regen Licht, das ist keine Entscheidung des Spielers. Die Entscheidung
+## kommt spaeter - wenn der Ausguck die Sicht liest, wird ein Licht zu etwas,
+## das einen verraet, und dann gibt es einen Grund, es zu loeschen.
+func _update_lanterns() -> void:
+	if _lanterns.is_empty():
+		return
+	var wanted := Skylight.lanterns_lit(WorldData.visibility(), _lanterns_lit)
+	if wanted == _lanterns_lit:
+		return
+	_lanterns_lit = wanted
+	for lantern: Lantern in _lanterns:
+		lantern.set_lit(wanted)
+
+
+## Brennen die Laternen?
+func lanterns_lit() -> bool:
+	return _lanterns_lit
+
+
+## Unter welcher Farbe dieses Schiff faehrt.
+##
+## Aus der Nation, wenn es eine hat - sonst schwarz. Ein Schiff ohne Flagge
+## gibt es nicht; wer keine Krone hinter sich hat, faehrt eben ohne eine.
+func _flag_colour() -> Color:
+	var nation: NationData = WorldData.get_nation(nation_id)
+	return nation.color if nation != null else Palette.IRON
 
 
 # --- Zustand ---------------------------------------------------------------
@@ -289,14 +402,47 @@ func apply_class(source: ShipClass) -> void:
 	cannons_per_side = maxi(1, int(ceil(float(source.cannon_slots) * 0.5)))
 	gun_traverse = source.gun_traverse
 
+	_install_model(source.model)
 	_scale_hull(source.hull_scale)
+	_measure_hull(source)
 
 
-## Groessere Klassen benutzen dasselbe Modell in groesser.
+## Setzt das Modell einer Klasse ein, sofern sie eines mitbringt.
 ##
-## Solange es nur ein Rumpfmodell gibt, ist die Groesse das einzige Merkmal,
-## an dem man eine Brigg von einer Schaluppe unterscheidet - Regel A1 verlangt
-## unterscheidbare Silhouetten auf Entfernung.
+## Ohne eigenes Modell bleibt der Rumpf aus ship.tscn stehen - so faehrt jede
+## Klasse, die noch keines hat, weiter wie bisher.
+func _install_model(scene: PackedScene) -> void:
+	if scene == null:
+		return
+	var body := scene.instantiate() as Node3D
+	if body == null:
+		return
+
+	var old := get_node_or_null("Hull")
+	if old != null:
+		# queue_free() wirkt erst am Bildende. Bis dahin haengen zwei Knoten
+		# namens "Hull" im Baum, und Godot taufte den neuen still in "Hull2" um -
+		# danach findet get_node("Hull") den alten, leeren Rumpf. Also erst aus
+		# dem Baum nehmen, dann freigeben.
+		remove_child(old)
+		old.queue_free()
+
+	body.name = "Hull"
+	add_child(body)
+	# Ausdruecklich bauen statt auf _ready zu warten: Ob _ready schon gelaufen
+	# ist, haengt davon ab, ob das Schiff im Moment des Einsetzens selbst schon
+	# im Baum haengt - und danach richtet sich, ob die Segel gleich zu finden
+	# sind.
+	if body.has_method("build"):
+		body.call("build")
+	_collect_rigging()
+
+
+## Groessere Klassen ohne eigenes Modell benutzen dasselbe in groesser.
+##
+## Solange eine Klasse kein eigenes Rumpfmodell hat, ist die Groesse das
+## einzige Merkmal, an dem man eine Brigg von einer Schaluppe unterscheidet -
+## Regel A1 verlangt unterscheidbare Silhouetten auf Entfernung.
 func _scale_hull(factor: float) -> void:
 	if is_equal_approx(factor, 1.0):
 		return
@@ -306,8 +452,28 @@ func _scale_hull(factor: float) -> void:
 	var shape := get_node_or_null("Collision") as Node3D
 	if shape != null:
 		shape.scale = Vector3.ONE * factor
-	half_length = BASE_HALF_LENGTH * factor
-	half_beam = BASE_HALF_BEAM * factor
+
+
+## Die Rumpfmasse, mit denen Wellengang und Trefferentscheid rechnen.
+##
+## Ein einzelner Skalierungsfaktor konnte beides nur solange beschreiben, wie
+## alle Schiffe dieselbe Form hatten. Eine Karavelle ist laenger als die
+## Schaluppe und dabei schlanker - mit hull_scale allein waere sie entweder zu
+## kurz oder zu breit, und [method Gunnery.hits_target] wuerde gegen ein
+## Rechteck pruefen, das nicht auf dem Bildschirm steht.
+func _measure_hull(source: ShipClass) -> void:
+	half_length = BASE_HALF_LENGTH * source.hull_scale
+	half_beam = BASE_HALF_BEAM * source.hull_scale
+	if source.half_length > 0.0:
+		half_length = source.half_length
+	if source.half_beam > 0.0:
+		half_beam = source.half_beam
+
+	# Der Kollisionskoerper bleibt bewusst aussen vor: Er haengt als geteilte
+	# Unterressource in ship.tscn, und wer ihn hier umschreibt, aendert ihn fuer
+	# jedes andere Schiff gleich mit. Er dient ohnehin nur dazu, dass zwei
+	# Rumpfe nicht ineinander stehen - getroffen wird ueber half_length und
+	# half_beam, und die stimmen jetzt.
 
 
 func hull_fraction() -> float:

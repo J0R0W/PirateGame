@@ -46,7 +46,21 @@ extends Resource
 ##
 ## Solange alle Klassen dasselbe Modell benutzen, ist die Groesse das einzige
 ## Merkmal, an dem man sie auf See auseinanderhaelt - Regel A1.
+##
+## Klassen mit eigenem [member model] lassen ihn auf 1.0 und geben stattdessen
+## [member half_length] und [member half_beam] an.
 @export var hull_scale: float = 1.0
+
+## Halbe Rumpflaenge und halbe Rumpfbreite in Metern. Null heisst: aus
+## [member hull_scale] rechnen.
+##
+## Ein einzelner Faktor beschreibt beides nur solange, wie alle Schiffe
+## dieselbe Form haben. Eine Karavelle ist laenger als die Schaluppe und dabei
+## schlanker - mit hull_scale allein waere sie entweder zu kurz oder zu breit,
+## und [method Gunnery.hits_target] pruefte gegen ein Rechteck, das nicht auf
+## dem Bildschirm steht.
+@export var half_length: float = 0.0
+@export var half_beam: float = 0.0
 
 @export_group("Mannschaft")
 @export var min_crew: int = 10

@@ -10,13 +10,26 @@ extends Node
 const OUT_DIR: String = "user://captures"
 ## Winkel um die Hochachse und Hoehe der Kamera, je Aufnahme.
 const VIEWS: Array[Dictionary] = [
-	{"name": "ship_01_steuerbord", "yaw": 90.0, "pitch": 8.0, "distance": 18.0},
-	{"name": "ship_02_bug", "yaw": 152.0, "pitch": 14.0, "distance": 17.0},
-	{"name": "ship_03_heck", "yaw": 25.0, "pitch": 16.0, "distance": 17.0},
-	{"name": "ship_04_oben", "yaw": 115.0, "pitch": 52.0, "distance": 20.0},
+	{"name": "01_steuerbord", "yaw": 90.0, "pitch": 8.0, "distance": 18.0},
+	{"name": "02_bug", "yaw": 152.0, "pitch": 14.0, "distance": 17.0},
+	{"name": "03_heck", "yaw": 25.0, "pitch": 16.0, "distance": 17.0},
+	{"name": "04_oben", "yaw": 115.0, "pitch": 52.0, "distance": 20.0},
+]
+
+## Was gezeigt wird. Leerer Pfad heisst: der Rumpf aus ship.tscn, den jede
+## Klasse ohne eigenes Modell benutzt.
+## Die Flagge bekommt jedes Schiff eine andere, damit man auf der
+## Silhouettenaufnahme beide auseinanderhaelt.
+const SUBJECTS: Array[Dictionary] = [
+	{"prefix": "ship", "ship_class": "", "nation": 2},
+	{"prefix": "caravel", "ship_class": "res://resources/ships/caravel.tres",
+		"nation": 0},
 ]
 
 var _camera: Camera3D
+var _sun: DirectionalLight3D
+var _fill: DirectionalLight3D
+var _environment: Environment
 
 
 func _ready() -> void:
@@ -25,43 +38,93 @@ func _ready() -> void:
 
 	_build_stage()
 
-	var packed: PackedScene = load("res://entities/ship/ship.tscn")
-	var ship: Node3D = packed.instantiate()
-	add_child(ship)
-	# Ruhig stellen: kein Wellengang, keine Eingaben, feste Wasserlinie.
-	ship.set("player_controlled", false)
-	ship.set_physics_process(false)
+	# Wind von schraeg vorn an Steuerbord: Dabei stehen Rah und Flagge sichtbar
+	# ausgeschwenkt. Bei Wind genau von achtern staende alles gerade und man
+	# saehe der Aufnahme nicht an, ob die Stellung ueberhaupt gerechnet wird.
+	WorldData.set_wind(deg_to_rad(55.0), 1.0)
+	WorldData.wind_locked = true
 
-	await get_tree().process_frame
+	for subject: Dictionary in SUBJECTS:
+		var ship: Node3D = _spawn(subject["ship_class"], subject["nation"])
+		await get_tree().process_frame
 
-	for view: Dictionary in VIEWS:
-		_place_camera(view)
-		await _wait(0.35)
-		await _shot(view["name"])
+		for view: Dictionary in VIEWS:
+			_place_camera(view, Vector3.ZERO)
+			await _wait(0.35)
+			await _shot("%s_%s" % [subject["prefix"], view["name"]])
 
+		# Und einmal bei Nacht: Die Laterne muss brennen und man muss sie
+		# sehen - beides laesst sich headless nicht pruefen, ein Licht ist
+		# nur im Bild etwas.
+		_night(true)
+		_place_camera(VIEWS[2], Vector3.ZERO)
+		await _wait(Lantern.FADE + 0.3)
+		await _shot("%s_05_nacht" % subject["prefix"])
+		_night(false)
+
+		ship.queue_free()
+		await get_tree().process_frame
+
+	await _silhouettes()
 	get_tree().quit(0)
 
 
+## Alle Rumpfformen nebeneinander, von weit weg und querab.
+##
+## Regel A1 verlangt Silhouetten, die man auf Entfernung auseinanderhaelt. Aus
+## der Nahaufnahme laesst sich das nicht beurteilen - dort sieht jedes Modell
+## nach etwas aus.
+func _silhouettes() -> void:
+	var spacing := 16.0
+	var offset := -spacing * (SUBJECTS.size() - 1) * 0.5
+	for subject: Dictionary in SUBJECTS:
+		var ship: Node3D = _spawn(subject["ship_class"], subject["nation"])
+		ship.position = Vector3(0.0, 0.0, offset)
+		offset += spacing
+
+	await get_tree().process_frame
+	_place_camera(
+		{"yaw": 90.0, "pitch": 6.0, "distance": 78.0}, Vector3(0.0, 3.0, 0.0))
+	await _wait(0.35)
+	await _shot("ship_00_silhouetten")
+
+
+## Setzt ein Schiff, wahlweise mit einer Klasse und deren eigenem Modell.
+func _spawn(class_path: String, nation: int) -> Node3D:
+	var packed: PackedScene = load("res://entities/ship/ship.tscn")
+	var ship: Node3D = packed.instantiate()
+	# Ruhig stellen: kein Wellengang, keine Eingaben, feste Wasserlinie. Rah und
+	# Flagge laufen trotzdem - sie haengen an _process, nicht an der Physik.
+	ship.set("player_controlled", false)
+	add_child(ship)
+	ship.set_physics_process(false)
+	if class_path != "":
+		var ship_class: ShipClass = load(class_path)
+		ship.call("apply_class", ship_class)
+	ship.set("nation_id", nation)
+	return ship
+
+
 func _build_stage() -> void:
-	var sun := DirectionalLight3D.new()
-	sun.rotation_degrees = Vector3(-42.0, -55.0, 0.0)
-	sun.light_energy = 1.2
-	sun.shadow_enabled = true
-	add_child(sun)
+	_sun = DirectionalLight3D.new()
+	_sun.rotation_degrees = Vector3(-42.0, -55.0, 0.0)
+	_sun.light_energy = 1.2
+	_sun.shadow_enabled = true
+	add_child(_sun)
 
-	var fill := DirectionalLight3D.new()
-	fill.rotation_degrees = Vector3(-20.0, 130.0, 0.0)
-	fill.light_energy = 0.35
-	add_child(fill)
+	_fill = DirectionalLight3D.new()
+	_fill.rotation_degrees = Vector3(-20.0, 130.0, 0.0)
+	_fill.light_energy = 0.35
+	add_child(_fill)
 
-	var environment := Environment.new()
-	environment.background_mode = Environment.BG_COLOR
-	environment.background_color = Color(0.16, 0.24, 0.31)
-	environment.ambient_light_source = Environment.AMBIENT_SOURCE_COLOR
-	environment.ambient_light_color = Color(0.55, 0.65, 0.75)
-	environment.ambient_light_energy = 0.5
+	_environment = Environment.new()
+	_environment.background_mode = Environment.BG_COLOR
+	_environment.background_color = Color(0.16, 0.24, 0.31)
+	_environment.ambient_light_source = Environment.AMBIENT_SOURCE_COLOR
+	_environment.ambient_light_color = Color(0.55, 0.65, 0.75)
+	_environment.ambient_light_energy = 0.5
 	var world_environment := WorldEnvironment.new()
-	world_environment.environment = environment
+	world_environment.environment = _environment
 	add_child(world_environment)
 
 	# Wasserlinie als ruhige Flaeche - man muss sehen, was eintaucht.
@@ -80,11 +143,27 @@ func _build_stage() -> void:
 	add_child(_camera)
 
 
-func _place_camera(view: Dictionary) -> void:
+## Buehne auf Nacht stellen - und die Uhr des Spiels gleich mit, denn
+## danach richtet sich, ob das Schiff seine Laterne anzuendet.
+##
+## Die Buehnenlichter folgen den Zahlen aus [Skylight], nicht eigenen:
+## So zeigt die Aufnahme dieselbe Nacht wie der Segelmodus.
+func _night(on: bool) -> void:
+	var t := 22.0 / 24.0 if on else 0.5
+	GameState.game_minutes = t * 1440.0
+	var weather := WorldData.Weather.CLEAR
+	_sun.light_energy = Skylight.light_energy(t, weather) * (1.0 if on else 1.05)
+	_sun.light_color = Skylight.light_colour(t)
+	_fill.light_energy = 0.0 if on else 0.35
+	_environment.ambient_light_energy = Skylight.ambient_energy(t) * (0.25 if on else 0.85)
+	_environment.background_color = Palette.NIGHT_HAZE if on else Color(0.16, 0.24, 0.31)
+
+
+func _place_camera(view: Dictionary, centre: Vector3) -> void:
 	var yaw: float = deg_to_rad(view["yaw"])
 	var pitch: float = deg_to_rad(view["pitch"])
 	var distance: float = view["distance"]
-	var focus := Vector3(0.0, 2.2, 0.0)
+	var focus := centre + Vector3(0.0, 2.2, 0.0)
 
 	_camera.global_position = focus + Vector3(
 		sin(yaw) * cos(pitch) * distance,

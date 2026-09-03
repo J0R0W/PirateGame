@@ -46,6 +46,9 @@ var wind_direction: float = 0.0
 ## Windstaerke als Faktor 0.0-1.5.
 var wind_strength: float = 1.0
 
+## Das Wetter. Setzt bisher niemand ausser dem Debug-Menue - es gibt noch
+## keine Wetteruhr (KONZEPT 5.6). Aber alles, was auf Sicht reagiert, liest
+## es schon, und wenn die Uhr kommt, brennen die Laternen im Regen von selbst.
 var weather: Weather = Weather.CLEAR
 
 ## Haelt den Wind fest, wo er steht.
@@ -110,6 +113,14 @@ func _update_economy() -> void:
 	var days := elapsed / 1440.0
 	for town: TownData in towns:
 		town.advance_economy(days)
+
+
+## Wie weit man gerade sieht, 0.0 bis 1.0 - aus Uhrzeit und Wetter.
+##
+## Die Rechnung steht in [Skylight]; hier wird nur die laufende Uhr
+## eingesetzt. Wer ohne Welt fragt, nimmt Skylight direkt.
+func visibility() -> float:
+	return Skylight.visibility(GameState.time_of_day(), weather)
 
 
 func _update_wind(delta: float) -> void:

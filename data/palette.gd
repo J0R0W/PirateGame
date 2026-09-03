@@ -49,8 +49,46 @@ const PIER := Color(0.361, 0.286, 0.212)
 
 # --- Schiff und Takelage ---------------------------------------------------
 const HULL := Color(0.243, 0.153, 0.110)
+## Das Freibord über dem Bergholz: Schanzkleid, Aufbauten, Achterdeckswand.
+##
+## Zuerst war alles über der Wasserlinie `TAR`, und die Karavelle war von der
+## Seite ein schwarzer Klumpen mit hellem Deck. Ein Rumpf hat aber drei Bänder,
+## nicht zwei: dunkler Boden, ein schwarzes Bergholz, darüber helleres Holz.
+## Erst damit trennt sich das Achterdeck sichtbar vom Rumpf (Regel A11 —
+## getrennt wird über Helligkeit).
+const TOPSIDE := Color(0.392, 0.271, 0.180)
+## Geteerte Bergholzer und die Wasserlinie - der dunkelste Ton am Schiff.
+##
+## Er zeichnet die Sprunglinie des Decks nach. Ohne dieses dunkle Band ist ein
+## Rumpf aus der Entfernung eine braune Flaeche ohne Form (Regel A11: der
+## Umriss traegt, nicht die Oberflaeche).
+const TAR := Color(0.129, 0.098, 0.086)
+## Rundhoelzer: Masten, Rahen, Bugspriet. Geoelt, also waermer als das Deck.
 const TIMBER := Color(0.561, 0.416, 0.259)
+## Decksplanken. Grauer und ausgeblichener als TIMBER - ein Deck liegt jahrelang
+## in der Sonne, eine Rah wird geschmiert.
+const DECK := Color(0.494, 0.427, 0.337)
 const CANVAS := Color(0.914, 0.894, 0.827)
+## Der Fuss des Segeltuchs, im Schatten des eigenen Bauchs. Ohne zweiten Ton
+## ist ein Segel eine weisse Flaeche ohne Woelbung.
+const CANVAS_SHADE := Color(0.741, 0.718, 0.655)
+## Das Glas einer Laterne, solange sie kalt ist: rauchig, nicht weiss.
+const GLASS := Color(0.62, 0.60, 0.55)
+## Laternenlicht - Talg und Tran, also deutlich waermer als die Sonne.
+## Der einzige Ton im Spiel, der bei Nacht leuchtet.
+const LANTERN := Color(1.0, 0.72, 0.38)
+
+# --- Himmel ----------------------------------------------------------------
+## Sonnenlicht hoch am Tag: fast weiss, eine Spur warm.
+const SUN_HIGH := Color(1.0, 0.97, 0.92)
+## Sonnenlicht dicht am Horizont.
+const SUN_LOW := Color(1.0, 0.62, 0.36)
+## Mondlicht. Kalt und blau, und nur so hell, dass man noch fahren kann.
+const MOONLIGHT := Color(0.58, 0.68, 0.86)
+## Dunst am Tag - die Farbe, in der das Land am Horizont verschwindet.
+const HAZE := Color(0.588, 0.690, 0.776)
+## Derselbe Dunst bei Nacht.
+const NIGHT_HAZE := Color(0.075, 0.098, 0.137)
 
 # --- Gefecht ---------------------------------------------------------------
 ## Pulverdampf und Gischt. Der einzige Ton, der ueber der See heller ist als
@@ -102,3 +140,15 @@ static func for_vertex(color: Color) -> Color:
 ## Farbe mit anderer Deckkraft, ohne die Konstante zu kopieren.
 static func fade(color: Color, alpha: float) -> Color:
 	return Color(color.r, color.g, color.b, alpha)
+
+
+## Ein reiner Grauwert - für Masken, nicht für Gestaltung.
+##
+## [ShipTextures] rechnet Planken- und Segeltuchmuster als Graustufen, die
+## multiplikativ über die Vertexfarben laufen. Das ist keine Farbwahl und
+## gehört deshalb nicht in eine Konstante; ohne diese Funktion stünde dort
+## aber ein `Color(...)` außerhalb dieser Datei, und genau das verbietet der
+## Rauchtest zu Recht.
+static func grey(value: float) -> Color:
+	var v := clampf(value, 0.0, 1.0)
+	return Color(v, v, v)

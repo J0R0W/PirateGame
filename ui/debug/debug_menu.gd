@@ -24,6 +24,8 @@ const CAPTION_WIDTH: float = 120.0
 const VALUE_WIDTH: float = 74.0
 const PANEL_WIDTH: float = 430.0
 const MARGIN: int = 18
+## Beschriftung der Wetterstufen, Reihenfolge wie [enum WorldData.Weather].
+const WEATHER_NAMES: PackedStringArray = ["klar", "bedeckt", "Regen", "Sturm"]
 
 var ship: Ship
 var combat: NavalCombat
@@ -37,6 +39,9 @@ var _interval: HSlider
 var _ships: HSlider
 var _ship_count: Label
 var _grid: CheckBox
+var _clock: HSlider
+var _clock_hold: CheckBox
+var _weather: HSlider
 ## Regler -> Label rechts daneben. Spart einen Haufen einzelner Felder.
 var _values: Dictionary = {}
 
@@ -98,6 +103,14 @@ func _ready() -> void:
 	column.add_child(_section("Wasser"))
 	_grid = _check(column, "Gitternetz zeichnen", _on_grid)
 
+	# Ein Spieltag dauert vier Minuten. Wer die Nacht sehen will, soll nicht
+	# zwei davon warten muessen - und wer die Laternen im Regen pruefen will,
+	# hat sonst gar keinen Weg dorthin, weil noch keine Wetteruhr laeuft.
+	column.add_child(_section("Himmel"))
+	_clock = _slider(column, "Uhrzeit", 0.0, 23.75, 0.25, _on_clock)
+	_clock_hold = _check(column, "Uhr anhalten", _on_clock_hold)
+	_weather = _slider(column, "Wetter", 0.0, 3.0, 1.0, _on_weather)
+
 
 func toggle() -> void:
 	visible = not visible
@@ -115,6 +128,9 @@ func _process(_delta: float) -> void:
 	if combat != null:
 		var count := combat.ships().size()
 		_ship_count.text = "%d fremde Segel in der Welt" % count
+	# Die Uhr laeuft weiter - der Regler geht mit.
+	if GameState.time_running:
+		_set_silently(_clock, GameState.time_of_day() * 24.0)
 
 
 ## Holt den aktuellen Stand in die Regler. Beim Öffnen und beim Aufsetzen -
@@ -131,6 +147,9 @@ func _read_back() -> void:
 		_set_silently(_interval, combat.spawn_interval)
 		_set_silently(_ships, float(combat.max_ships))
 	_grid.set_pressed_no_signal(ocean.show_grid if ocean != null else false)
+	_set_silently(_clock, GameState.time_of_day() * 24.0)
+	_clock_hold.set_pressed_no_signal(not GameState.time_running)
+	_set_silently(_weather, float(WorldData.weather))
 
 
 # --- Regler ----------------------------------------------------------------
@@ -186,6 +205,24 @@ func _on_spawn() -> void:
 func _on_grid(pressed: bool) -> void:
 	if ocean != null:
 		ocean.show_grid = pressed
+
+
+## Stellt die Uhr innerhalb des laufenden Tages. Der Tag selbst bleibt:
+## Fristen und Kriege haengen an ihm, und die soll ein Blick auf die Nacht
+## nicht verschieben.
+func _on_clock(value: float) -> void:
+	var day := floorf(GameState.game_minutes / 1440.0)
+	GameState.game_minutes = day * 1440.0 + value * 60.0
+	_show(_clock, Skylight.clock(value / 24.0))
+
+
+func _on_clock_hold(pressed: bool) -> void:
+	GameState.time_running = not pressed
+
+
+func _on_weather(value: float) -> void:
+	WorldData.weather = int(value) as WorldData.Weather
+	_show(_weather, WEATHER_NAMES[int(value)])
 
 
 # --- Bauteile --------------------------------------------------------------
@@ -258,6 +295,10 @@ func _refresh_value(slider: HSlider, value: float) -> void:
 		_show(slider, "%d s" % int(value))
 	elif slider == _ships:
 		_show(slider, "%d" % int(value))
+	elif slider == _clock:
+		_show(slider, Skylight.clock(value / 24.0))
+	elif slider == _weather:
+		_show(slider, WEATHER_NAMES[clampi(int(value), 0, WEATHER_NAMES.size() - 1)])
 
 
 func _show(slider: HSlider, text: String) -> void:

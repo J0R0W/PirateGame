@@ -84,6 +84,37 @@ static func point_of_sail(ship_heading: float, wind_direction: float) -> String:
 		return "Vor dem Wind"
 
 
+## Wie weit die Rah ausschwenkt, in Radiant um die Hochachse des Schiffes.
+##
+## Das Ergebnis ist eine [i]oertliche[/i] Drehung im Schiff und kein Kurs -
+## die Winkelkonvention oben gilt dafuer nicht.
+##
+## Die Regel dahinter ist die aelteste der Seefahrt: [b]Die Sehne des Segels
+## halbiert den Winkel zwischen Wind und Mittschiffslinie.[/b] Vor dem Wind
+## (180 Grad zum Bug) steht sie quer, hart am Wind fast laengsschiffs.
+##
+## [param rest_chord] ist der Winkel, den die Sehne in Ruhe schon hat: Ein
+## Rahsegel haengt quer (PI/2), ein Lateiner laengs (0). Ohne diesen Wert
+## drehte eines der beiden Rigg genau verkehrt herum - beide muessen zum selben
+## Zielwinkel, starten aber von entgegengesetzten Ruhelagen.
+##
+## [param max_swing] begrenzt den Ausschlag. Ohne Grenze schwenkte die neun
+## Meter lange Antenne eines Lateiners vor dem Wind ganz quer und stuende dann
+## weiter ueber der See, als das Schiff breit ist.
+static func sail_trim(
+	ship_heading: float,
+	wind_direction: float,
+	rest_chord: float,
+	max_swing: float
+) -> float:
+	# Positiv heisst: Der Wind kommt von Steuerbord.
+	var off_bow := angle_difference(ship_heading, wind_direction)
+	var chord := absf(off_bow) * 0.5
+	var swing := minf(absf(chord - rest_chord), max_swing)
+	# Das Segel faellt nach Lee, also immer auf die windabgewandte Seite.
+	return swing if off_bow < 0.0 else -swing
+
+
 ## Zielgeschwindigkeit in Knoten. Die tatsaechliche Fahrt laeuft dieser
 ## traege hinterher - siehe Ship._physics_process().
 static func target_speed(

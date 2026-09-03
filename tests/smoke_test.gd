@@ -32,6 +32,10 @@ func _ready() -> void:
 	_check_shipyard()
 	_check_damage()
 	_check_ship_model()
+	_check_caravel_model()
+	_check_skylight()
+	_check_lanterns()
+	_check_sail_trim()
 	_check_heading_convention()
 	_check_gunnery()
 	_check_hit_geometry()
@@ -3219,6 +3223,404 @@ func _check_ship_model() -> void:
 			"Segel haengt an der Rah")
 
 	ship.queue_free()
+
+
+## Prueft das erste Schiff mit eigenem Rumpfmodell.
+##
+## Der wichtige Teil ist nicht die Optik, sondern dass das gezeichnete Schiff
+## und das Rechteck, gegen das [method Gunnery.hits_target] prueft, dieselbe
+## Groesse haben. Solange alle Klassen dasselbe Modell in verschiedenen Groessen
+## benutzten, konnte das gar nicht auseinanderlaufen; mit eigenen Modellen ist
+## es zwei Zahlen in einer .tres-Datei ueberlassen - und ein zu kurzes Rechteck
+## faellt im Gefecht nur als "die Kugel ging durch" auf.
+func _check_caravel_model() -> void:
+	var ship_class: ShipClass = load("res://resources/ships/caravel.tres")
+	_assert(ship_class != null, "Karavelle als Schiffsklasse ladbar")
+	if ship_class == null:
+		return
+	_assert(ship_class.model != null, "Karavelle bringt ein eigenes Modell mit")
+
+	var packed: PackedScene = load("res://entities/ship/ship.tscn")
+	var ship: Ship = packed.instantiate()
+	ship.player_controlled = false
+	add_child(ship)
+	ship.set_physics_process(false)
+	ship.apply_class(ship_class)
+
+	# Drei Masten, drei Lateiner - und alle drei muessen beim Reffen mitgehen.
+	var sails: Array[Node] = []
+	for node: Node in ship.find_children("*", "Node3D", true, false):
+		if node.is_in_group(&"sail"):
+			sails.append(node)
+	_assert(sails.size() == 3, "Karavelle fuehrt drei Segel (%d)" % sails.size())
+
+	var plating: MeshInstance3D = ship.get_node_or_null("Hull/Plating")
+	_assert(plating != null, "Rumpf der Karavelle gebaut")
+	if plating != null:
+		var box: AABB = plating.mesh.get_aabb()
+		# Ein halber Meter Spiel: Der Spiegel steht senkrecht, der Steven faellt,
+		# und der Kiel ragt unter die Wasserlinie.
+		_assert(absf(box.size.z - ship.half_length * 2.0) < 0.5,
+			"Gezeichnete Laenge trifft half_length (%.2f gegen %.2f)"
+				% [box.size.z, ship.half_length * 2.0])
+		_assert(absf(box.size.x - ship.half_beam * 2.0) < 0.5,
+			"Gezeichnete Breite trifft half_beam (%.2f gegen %.2f)"
+				% [box.size.x, ship.half_beam * 2.0])
+
+	# Die Wanten endeten zuerst dort, wo der Masttopp stuende, wenn der Mast
+	# senkrecht waere - in der richtigen Hoehe und einen halben Meter zu weit
+	# vorn. Der Fall der Masten war in der Hoehe gerechnet und in der Laenge
+	# vergessen.
+	for i in CaravelModel.MASTS.size():
+		var pole: MeshInstance3D = ship.get_node_or_null("Hull/Mast%d/Spar" % i)
+		if pole == null:
+			_assert(false, "Mast %d vorhanden" % i)
+			continue
+		var pole_mesh: CylinderMesh = pole.mesh
+		var head: Vector3 = pole.global_position \
+			+ pole.global_basis.y.normalized() * (pole_mesh.height * 0.5)
+
+		var worst := 0.0
+		var found := 0
+		for node: Node in ship.find_children("Shroud%d_*" % i, "MeshInstance3D", true, false):
+			var rope: MeshInstance3D = node
+			var axis: Vector3 = rope.global_basis.y.normalized() \
+				* ((rope.mesh as CylinderMesh).height * 0.5)
+			# Welches Ende oben liegt, haengt an der Richtung der Basis.
+			var top: Vector3 = rope.global_position + axis
+			if (rope.global_position - axis).y > top.y:
+				top = rope.global_position - axis
+			worst = maxf(worst, top.distance_to(head))
+			found += 1
+		_assert(found > 0, "Mast %d ist verwantet (%d Taue)" % [i, found])
+		_assert(worst < 0.08,
+			"Wanten von Mast %d enden am Topp (%.3f m daneben)" % [i, worst])
+
+	# Das Achterdeck lag zuerst als Platte ueber dem Schiff - nur der Deckel war
+	# gebaut, die Seitenwaende fehlten. Von der Verfolgerkamera sah man es nicht.
+	var tolda: MeshInstance3D = ship.get_node_or_null("Hull/Tolda")
+	_assert(tolda != null, "Achterdeck gebaut")
+	if tolda != null:
+		var box: AABB = tolda.mesh.get_aabb()
+		_assert(box.size.y > CaravelModel.TOLDA_HEIGHT - CaravelModel.BULWARK,
+			"Achterdeck hat Seitenwaende, schwebt also nicht (%.2f hoch)"
+				% box.size.y)
+		_assert(box.position.z >= CaravelModel.TOLDA_START - 0.01,
+			"Achterdeck liegt achtern, nicht ueber dem ganzen Schiff")
+
+	# Drei Rahen, die schwenken - und der Mast darf nicht mit ihnen drehen,
+	# sonst kippt sein Fall zur Seite und die Wanten laufen ins Leere.
+	var rigs: Array[Node] = ship.find_children("*", "Rig", true, false)
+	_assert(rigs.size() == 3, "Karavelle hat drei schwenkbare Rahen (%d)" % rigs.size())
+	for rig: Node in rigs:
+		_assert(not rig.name.begins_with("Mast"),
+			"Rah haengt nicht am Mast, sondern neben ihm (%s)" % rig.name)
+
+	# Die Flagge steht in einer WELTrichtung, nicht in einer des Schiffs.
+	var flags: Array[Node] = ship.find_children("*", "Flag", true, false)
+	_assert(flags.size() == 1, "Karavelle fuehrt eine Flagge (%d)" % flags.size())
+	if flags.size() == 1:
+		var flag: Flag = flags[0]
+		# Schiff quer zum spaeteren Wind stellen: Stuende die Flagge im
+		# Schiffssystem, zeigte sie danach in die falsche Richtung.
+		ship.set_heading(deg_to_rad(90.0))
+		flag.stream(deg_to_rad(0.0), 1.0, 0.0)
+		# Wind aus Nord heisst: Das Tuch weht nach Sueden, also nach +Z.
+		var along: Vector3 = flag.global_basis.x.normalized()
+		_assert(along.dot(Vector3.BACK) > 0.99,
+			"Flagge weht mit dem Wind, nicht mit dem Kurs (%.2f)"
+				% along.dot(Vector3.BACK))
+
+	# Das Modell soll so bewaffnet aussehen, wie die Klasse schiesst. Vier
+	# Drehbassen in der Tabelle des Modells, vier Rohre in der .tres - wer
+	# eines von beiden aendert, muss das andere nachziehen.
+	var model: ShipModel = ship.get_node_or_null("Hull")
+	_assert(model != null, "Modell der Karavelle ist ein ShipModel")
+	if model != null:
+		_assert(model.gun_count() == ship_class.cannon_slots,
+			"Sichtbare Rohre entsprechen cannon_slots (%d gegen %d)"
+				% [model.gun_count(), ship_class.cannon_slots])
+		_check_hull_is_closed(ship, model)
+	_check_hull_planking(plating)
+
+	# Eine Laterne am Heck, und sie gehoert dem Schiff: Es muss sie am Typ
+	# finden, nicht am Namen.
+	var lanterns: Array[Node] = ship.find_children("*", "Lantern", true, false)
+	_assert(lanterns.size() == 1, "Karavelle traegt eine Laterne (%d)" % lanterns.size())
+
+	ship.queue_free()
+
+
+## Ist der Rumpf dicht?
+##
+## Der Anlass: Von achtern sah man ueber die Reling hinweg in das Schiff
+## hinein - die Kajuete unter dem Achterdeck hatte keine Heckwand. Ein zweites
+## Loch sass am Bug, wo der vorderste Spant vierzehn Zentimeter breit ist und
+## kein Steven ihn schloss.
+##
+## Beides faellt aus der Verfolgerkamera nie auf und aus einer Standaufnahme
+## sofort. Geprueft wird deshalb nicht, ob bestimmte Flaechen existieren,
+## sondern das, worauf es ankommt: Von jedem Punkt im Inneren muss in jede der
+## sechs Richtungen etwas im Weg sein. Wer eine Wand vergisst, faellt hier
+## durch, egal welche.
+##
+## Welche Knoten die Huelle bilden und wo ihre Innenraeume liegen, sagt das
+## Modell selbst ([method ShipModel.hull_parts], [method ShipModel.interior_probes]).
+## So laeuft dieselbe Pruefung ueber jedes kuenftige Schiff, ohne dass hier
+## Punkte fuer jeden Rumpf stuenden.
+func _check_hull_is_closed(_ship: Ship, model: ShipModel) -> void:
+	var triangles := PackedVector3Array()
+	for part: String in model.hull_parts():
+		var node: MeshInstance3D = model.get_node_or_null(NodePath(part))
+		if node != null:
+			_gather_triangles(node, triangles)
+	_assert(triangles.size() > 0, "Rumpfflaechen zum Pruefen gefunden")
+	if triangles.is_empty():
+		return
+
+	var probes: Array[Dictionary] = model.interior_probes()
+	_assert(probes.size() > 0, "Modell nennt seine Innenraeume (%d)" % probes.size())
+	var directions: Array[Vector3] = [
+		Vector3.UP, Vector3.DOWN, Vector3.LEFT, Vector3.RIGHT,
+		Vector3.FORWARD, Vector3.BACK,
+	]
+
+	for probe: Dictionary in probes:
+		var open := 0
+		for direction: Vector3 in directions:
+			if not _ray_hits(triangles, probe["at"], direction):
+				open += 1
+		_assert(open == 0,
+			"%s ist nach allen Seiten geschlossen (%d offen)" % [probe["was"], open])
+
+
+## Traegt der Rumpf Planken - und laufen sie in die richtige Richtung?
+##
+## Die Textur ist eine Graustufenmaske; die Farbe kommt weiter aus [Palette].
+## Getrennte Flaechen fuer Aussenhaut und Deck sind dabei kein Detail, sondern
+## der ganze Punkt: Auf einer einzigen Flaeche laege eine der beiden
+## Plankenrichtungen quer.
+func _check_hull_planking(plating: MeshInstance3D) -> void:
+	if plating == null:
+		return
+	var mesh: ArrayMesh = plating.mesh
+	_assert(mesh.get_surface_count() == 2,
+		"Rumpf hat getrennte Flaechen fuer Haut und Deck (%d)"
+			% mesh.get_surface_count())
+	_assert(plating.material_override == null,
+		"Kein Override - sonst bekaemen beide Flaechen dasselbe Material")
+
+	for surface in mesh.get_surface_count():
+		var mat: StandardMaterial3D = mesh.surface_get_material(surface)
+		_assert(mat != null and mat.albedo_texture != null,
+			"Flaeche %d ist beplankt" % surface)
+		_assert(mat != null and mat.vertex_color_use_as_albedo,
+			"Flaeche %d nimmt die Farbe weiter aus den Vertexfarben" % surface)
+
+		var uvs: PackedVector2Array = mesh.surface_get_arrays(surface)[Mesh.ARRAY_TEX_UV]
+		var span := Rect2(uvs[0], Vector2.ZERO)
+		for uv: Vector2 in uvs:
+			span = span.expand(uv)
+		# In Metern gerechnet: Ein Rumpf von knapp zehn Metern muss sich ueber
+		# mehrere Kacheln ziehen. Bliebe alles auf einem Punkt, laege ueber dem
+		# Schiff ein einziger Texel - und niemand saehe, dass etwas fehlt.
+		_assert(span.size.x > 5.0 and span.size.y > 0.5,
+			"Flaeche %d ist in Metern abgewickelt (%.1f x %.1f)"
+				% [surface, span.size.x, span.size.y])
+
+
+## Alle Dreiecke eines Meshes, im Koordinatensystem des Rumpfes.
+func _gather_triangles(node: MeshInstance3D, into: PackedVector3Array) -> void:
+	var mesh: ArrayMesh = node.mesh
+	if mesh == null:
+		return
+	for surface in mesh.get_surface_count():
+		var arrays: Array = mesh.surface_get_arrays(surface)
+		var points: PackedVector3Array = arrays[Mesh.ARRAY_VERTEX]
+		# SurfaceTool gibt nur dann einen Index heraus, wenn ausdruecklich
+		# indiziert wurde - sonst steht dort schlicht nichts.
+		var order := PackedInt32Array()
+		if arrays[Mesh.ARRAY_INDEX] != null:
+			order = arrays[Mesh.ARRAY_INDEX]
+		if order.is_empty():
+			for point: Vector3 in points:
+				into.append(node.transform * point)
+		else:
+			for index: int in order:
+				into.append(node.transform * points[index])
+
+
+## Trifft ein Strahl irgendein Dreieck?
+##
+## Godots Test ist beidseitig - die Wicklung der Flaeche spielt also keine
+## Rolle, und das ist hier richtig so: Gefragt ist, ob etwas im Weg steht,
+## nicht, ob es richtig herum steht. Die Wicklung sichert [method HullMesh.face].
+func _ray_hits(triangles: PackedVector3Array, from: Vector3, direction: Vector3) -> bool:
+	for i in range(0, triangles.size(), 3):
+		var hit = Geometry3D.ray_intersects_triangle(
+			from, direction, triangles[i], triangles[i + 1], triangles[i + 2])
+		if hit != null:
+			return true
+	return false
+
+
+## Der Himmel als reine Funktion: Sonnenstand, Sicht und die Laternenregel.
+##
+## Nodefrei, deshalb hier fest: Das Vorzeichen des Sonnenstands sieht man
+## einer Aufnahme nur an, wenn man weiss, wo Osten ist.
+func _check_skylight() -> void:
+	var noon := 0.5
+	var midnight := 0.0
+	var clear := WorldData.Weather.CLEAR
+	var storm := WorldData.Weather.STORM
+
+	_assert(is_equal_approx(Skylight.elevation(noon), 1.0), "Sonne mittags im Zenit")
+	_assert(is_equal_approx(Skylight.elevation(midnight), -1.0), "Sonne um Mitternacht unten")
+	_assert(is_zero_approx(Skylight.elevation(Skylight.SUNRISE)), "Sonnenaufgang um sechs")
+	_assert(not Skylight.is_night(noon) and Skylight.is_night(midnight), "Nacht heisst Sonne unter")
+
+	# Osten ist +X: Morgens steht die Sonne dort, das Licht faellt nach -X.
+	var dawn := Skylight.sun_position(0.30)
+	_assert(dawn.x > 0.0 and dawn.y > 0.0, "Morgensonne im Osten ueber dem Horizont")
+	_assert(Skylight.light_direction(0.30).x < 0.0, "Morgenlicht faellt nach Westen")
+	# Das Licht kommt nie von unten - nachts vom Mond, am Horizont waagerecht.
+	for t: float in [0.0, 0.1, 0.25, 0.5, 0.75, 0.9]:
+		_assert(Skylight.light_direction(t).y <= 0.0, "Licht faellt um %s nicht von unten" % Skylight.clock(t))
+
+	_assert(Skylight.light_energy(noon, clear) > Skylight.light_energy(midnight, clear),
+		"Mittag heller als Mitternacht")
+	_assert(Skylight.light_energy(midnight, clear) > 0.0, "Die Nacht ist mondhell, nicht schwarz")
+	_assert(Skylight.light_energy(noon, storm) < Skylight.light_energy(noon, clear),
+		"Sturm nimmt Licht")
+	_assert(Skylight.fog_density(storm) > Skylight.fog_density(clear), "Sturm macht Dunst")
+
+	_assert(is_equal_approx(Skylight.visibility(noon, clear), 1.0), "Klarer Mittag: volle Sicht")
+	_assert(is_zero_approx(Skylight.visibility(midnight, clear)), "Klare Nacht: keine Sicht")
+	_assert(Skylight.visibility(noon, storm) < Skylight.LIGHT_BELOW,
+		"Im Sturm brennen die Laternen auch mittags")
+	_assert(Skylight.visibility(noon, WorldData.Weather.CLOUDY) > Skylight.DOUSE_ABOVE,
+		"Bedeckt allein ist kein Grund fuer Licht")
+
+	# Zwei Schwellen: Was brennt, bleibt an, bis es wirklich hell ist.
+	var between := (Skylight.LIGHT_BELOW + Skylight.DOUSE_ABOVE) * 0.5
+	_assert(Skylight.lanterns_lit(0.1, false), "Bei Nacht anzuenden")
+	_assert(not Skylight.lanterns_lit(0.9, true), "Bei Tag loeschen")
+	_assert(Skylight.lanterns_lit(between, true), "Dazwischen bleibt an, was an ist")
+	_assert(not Skylight.lanterns_lit(between, false), "Dazwischen bleibt aus, was aus ist")
+
+	_assert(Skylight.clock(0.5) == "12:00" and Skylight.clock(0.0) == "00:00",
+		"Uhrzeit als Text (%s, %s)" % [Skylight.clock(0.5), Skylight.clock(0.0)])
+
+
+## Ein Schiff macht bei schlechter Sicht Licht - auch der Platzhalterrumpf.
+##
+## Geprueft am Schiff, nicht an der Laterne: Der Zustand mit seinen zwei
+## Schwellen sitzt im Schiff, und dort muss er beim Modellwechsel sauber
+## neu anfangen.
+func _check_lanterns() -> void:
+	var was_minutes := GameState.game_minutes
+	var was_weather := WorldData.weather
+	WorldData.weather = WorldData.Weather.CLEAR
+
+	var packed: PackedScene = load("res://entities/ship/ship.tscn")
+	var ship: Ship = packed.instantiate()
+	ship.player_controlled = false
+	add_child(ship)
+	ship.set_physics_process(false)
+
+	var lanterns: Array[Node] = ship.find_children("*", "Lantern", true, false)
+	_assert(lanterns.size() == 1, "Schaluppe traegt eine Laterne (%d)" % lanterns.size())
+	if lanterns.is_empty():
+		ship.queue_free()
+		return
+	var lantern: Lantern = lanterns[0]
+
+	GameState.game_minutes = 12.0 * 60.0
+	ship._process(0.0)
+	_assert(not ship.lanterns_lit() and not lantern.is_lit(), "Mittags kalt")
+
+	GameState.game_minutes = 22.0 * 60.0
+	ship._process(0.0)
+	_assert(ship.lanterns_lit() and lantern.is_lit(), "Um zehn brennt sie")
+	var light: OmniLight3D = lantern.get_node_or_null("Light")
+	_assert(light != null, "Die Laterne hat ein Licht")
+
+	# Sturm am Mittag: Sicht 0.25, also Licht - und kein Flackern zurueck,
+	# wenn es nur ein bisschen heller wird.
+	GameState.game_minutes = 12.0 * 60.0
+	WorldData.weather = WorldData.Weather.STORM
+	ship._process(0.0)
+	_assert(ship.lanterns_lit(), "Im Sturm bleibt sie an")
+	WorldData.weather = WorldData.Weather.RAIN
+	ship._process(0.0)
+	_assert(ship.lanterns_lit(), "Im Regen ebenfalls")
+	WorldData.weather = WorldData.Weather.CLEAR
+	ship._process(0.0)
+	_assert(not ship.lanterns_lit(), "Klar am Mittag: geloescht")
+
+	# Ein Modellwechsel vergisst die alten Laternen und findet die neuen.
+	GameState.game_minutes = 22.0 * 60.0
+	ship._process(0.0)
+	ship.apply_class(load("res://resources/ships/caravel.tres"))
+	_assert(not ship.lanterns_lit(), "Nach dem Modellwechsel faengt der Zustand neu an")
+	ship._process(0.0)
+	var stern: Node = ship.get_node_or_null("Hull/SternLantern")
+	_assert(stern != null and (stern as Lantern).is_lit(), "Die Hecklaterne der Karavelle brennt nachts")
+
+	GameState.game_minutes = was_minutes
+	WorldData.weather = was_weather
+	ship.queue_free()
+
+
+## Prueft die Stellung der Rah zum Wind.
+##
+## Nodefrei und deshalb die einzige Stelle, an der sich das Vorzeichen wirklich
+## festhalten laesst: Ob ein Segel nach Lee oder nach Luv faellt, sieht man auf
+## einem Standbild kaum - und falsch herum sieht es genauso plausibel aus.
+func _check_sail_trim() -> void:
+	var square := deg_to_rad(90.0)
+	var lateen := 0.0
+	var limit := deg_to_rad(80.0)
+	var north := 0.0
+
+	# Vor dem Wind steht die Rah eines Rahseglers quer, also in Ruhelage.
+	var running := SailingMath.sail_trim(north, PI, square, limit)
+	_assert(absf(running) < 0.01,
+		"Vor dem Wind steht die Rah quer (%.1f Grad)" % rad_to_deg(running))
+
+	# Halber Wind von Steuerbord: Die Sehne halbiert den Winkel, steht also bei
+	# 45 Grad - die Rah schwenkt um die restlichen 45 aus.
+	var beam := SailingMath.sail_trim(north, deg_to_rad(90.0), square, limit)
+	_assert(absf(rad_to_deg(beam)) > 44.0 and absf(rad_to_deg(beam)) < 46.0,
+		"Halber Wind bracht die Rah um 45 Grad (%.1f)" % rad_to_deg(beam))
+	# Und zwar so, dass die Luvnock nach achtern geht - sonst stuende das Segel
+	# mit dem Ruecken zum Wind.
+	_assert(beam < 0.0, "Wind von Steuerbord legt die Steuerbordnock nach achtern")
+
+	var beam_port := SailingMath.sail_trim(north, deg_to_rad(-90.0), square, limit)
+	_assert(is_equal_approx(beam_port, -beam), "Von Backbord spiegelbildlich")
+
+	# Der Lateiner faengt in der Gegenrichtung an: laengs statt quer.
+	var lateen_beam := SailingMath.sail_trim(north, deg_to_rad(90.0), lateen, limit)
+	_assert(absf(rad_to_deg(lateen_beam)) > 44.0 and absf(rad_to_deg(lateen_beam)) < 46.0,
+		"Lateiner schwenkt bei halbem Wind ebenfalls 45 Grad (%.1f)"
+			% rad_to_deg(lateen_beam))
+	_assert(signf(lateen_beam) == signf(beam),
+		"Beide Rigg fallen nach derselben Seite, naemlich nach Lee")
+
+	# Hart am Wind steht der Lateiner fast laengsschiffs, der Rahsegler brasst
+	# scharf an - genau die entgegengesetzte Bewegung aus derselben Regel.
+	var close_lateen := SailingMath.sail_trim(north, deg_to_rad(40.0), lateen, limit)
+	var close_square := SailingMath.sail_trim(north, deg_to_rad(40.0), square, limit)
+	_assert(absf(close_lateen) < absf(lateen_beam),
+		"Am Wind holt der Lateiner dichter")
+	_assert(absf(close_square) > absf(beam),
+		"Am Wind brasst der Rahsegler schaerfer")
+
+	# Die Grenze haelt: Ohne sie stuende die neun Meter lange Antenne quer.
+	var capped := SailingMath.sail_trim(north, PI, lateen, deg_to_rad(52.0))
+	_assert(absf(rad_to_deg(capped)) < 52.1,
+		"Der Ausschlag bleibt in der Grenze (%.1f Grad)" % rad_to_deg(capped))
 
 
 func _assert(condition: bool, label: String) -> void:

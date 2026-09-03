@@ -27,6 +27,11 @@ Materialfarben.
 Schiff mit 2000 Tris entsteht an einem Abend, eines mit 50 000 in zwei Wochen. Der Stil
 verzeiht außerdem Ungenauigkeiten in Modellierung und Animation.
 
+Der letzte Satz gilt seit [A11](#a11-nüchterne-karibik-das-licht-trägt-nicht-die-oberfläche)
+nur noch halb: Wenig Polygone bleiben Pflicht, aber *falsche* Polygone verzeiht der
+gewählte Stil nicht mehr. Die Sparsamkeit gehört in die Anzahl der Flächen, nicht in die
+Richtigkeit der Form.
+
 ### A3. Eine Palette, eine Quelle
 
 Alle Farben stehen in `data/palette.gd`. Im übrigen Code steht **kein** `Color(...)`, und
@@ -42,12 +47,16 @@ Ausnahmen: Nationsfarben stehen in `resources/nations/*.tres`, weil sie Spieldat
 und nicht Gestaltung. 3D-Materialien und die Umgebung (Himmel, Dunst) bleiben in der
 Szene, weil sie im Editor mit Live-Vorschau eingestellt werden.
 
+Reine Grauwerte sind keine Farbwahl, aber `Color(v, v, v)` wäre trotzdem ein `Color(...)`
+außerhalb dieser Datei. Dafür gibt es `Palette.grey()` — die Masken aus `ShipTextures`
+holen ihre Helligkeit dort, siehe [A11](#a11-nüchterne-karibik-das-licht-trägt-nicht-die-oberfläche).
+
 | Gruppe | Konstanten |
 |---|---|
 | **See** | `DEEP_SEA` `SHALLOW_SEA` `SHOAL` `SEABED` `FOAM` |
 | **Land** | `SAND` `GRASS` `SCRUB` `ROCK` `PEAK` |
 | **Siedlungen** | `WALL` `ROOF` `PIER` |
-| **Schiff** | `HULL` `TIMBER` `CANVAS` |
+| **Schiff** | `HULL` `TOPSIDE` `TAR` `TIMBER` `DECK` `CANVAS` `CANVAS_SHADE` |
 | **Gefecht** | `SMOKE` `IRON` |
 | **Anzeigen** | `HUD_TEXT` `HUD_DIM` `HUD_OUTLINE` `BACKDROP` `PARCHMENT` `MUTED` |
 | **Zustand** | `GOOD` `FAIR` `BAD` |
@@ -114,6 +123,73 @@ unsichtbar.
 
 Die allgemeine Form: Wo eine Regel den Spieler zwingt, etwas seitlich oder hinter sich zu
 halten, muss die Kamera davon wissen.
+
+### A11. Nüchterne Karibik: das Licht trägt, nicht die Oberfläche
+
+Der Stil ist ein helles, warmes, aber **sachliches** Bild — die Farbklarheit von
+*Sid Meier's Pirates!* (2004) mit dem Licht von heute und ohne dessen Verspieltheit.
+Referenzen zum Danebenhalten: *Assassin's Creed IV* auf See, *Anno 1800* im Hafen.
+
+| | Verbindlich |
+|---|---|
+| **Farbe** | Gesättigt, aber nicht bunt. Türkis nur über der Untiefe, die offene See geht ins gedeckte Blaugrau. Getrennt wird über Helligkeit und Material, nicht über Buntton |
+| **Form** | Richtige seemännische Verhältnisse. Kein gedrungener Rumpf, kein übergroßes Ruder, kein Zierrat. Ein Modell wird durch **Umriss und Proportion** ernst, nicht durch Maserung |
+| **Licht** | Weiche Schatten, Umgebungsverdeckung, AgX-Tonemapping. Nicht immer Mittag — `WorldData.Weather` gehört ins Bild |
+| **Luft** | Dunst, Wolken, Regenbank am Horizont. Atmosphäre ist das Mittel, mit dem dieses Projekt Ernst erzeugt |
+| **Oberfläche** | Farbe kommt aus [A3](#a3-eine-palette-eine-quelle), nie aus einem Bild. Erlaubt ist genau eine Art Textur: eine **gerechnete Graustufenmaske**, die multiplikativ nur die Fuge dunkler macht — Plankenstoß, Segelnaht. Keine Normal Maps, keine Farbtexturen, keine Dateien |
+| **Nachbearbeitung** | Bloom nur auf Glanzlichtern und Mündungsfeuer. Kein Vignette, keine chromatische Aberration, kein Filmkorn. Modern heißt sauber, nicht effektreich |
+
+**Warum:** Bis M6 hatte das Spiel zwei Gestaltungen und nur eine davon war entschieden.
+Seekarte und Hafenbildschirme waren fertig gedacht — Pergament, Tinte, Typografie ohne
+Kästen. Die 3D-Welt hatte dagegen gar keinen Stil, sondern nur Platzhalter: ein Rumpf aus
+drei Quadern, eine See, die nach Wellenhöhe statt nach Wassertiefe färbte, ein
+eingeschaltetes Debug-Gitter und ein leerer Verlaufshimmel. Der eigentliche Fehler war
+nicht, dass es unfertig aussah, sondern dass **niemand sagen konnte, wohin es fertig
+werden soll** — also wurde jede einzelne Entscheidung neu verhandelt.
+
+Verworfen wurden drei Alternativen, und der Grund gehört dazu: **Aquarell mit
+Federzeichnung** (schön, aber in Fahrt matschig und beim Wasser unlösbar),
+**Rasterbild mit Dithering** (versteckt jede Schwäche, macht aber ein Schiff auf 500 Meter
+zu vier Pixeln und widerspricht damit [A1](#a1-lesbarkeit-vor-realismus)) und
+**Sea-of-Thieves-Verspieltheit** (widerspricht der nüchternen 2D-Schicht, die schon steht).
+
+**Der Preis der Regel, und er ist echt:** Je sachlicher der Stil, desto weniger verzeiht er.
+Cartoonhafte Übertreibung deckt grobe Geometrie zu, sachliche Darstellung stellt sie aus —
+und **gutes Licht macht schlechte Geometrie sichtbarer, nicht unsichtbarer.** Wer weiche
+Schatten und Umgebungsverdeckung einschaltet, ohne vorher die Proportionen zu richten,
+arbeitet gegen sich selbst. Deshalb steht in der Tabelle *Form* vor *Licht*.
+
+Der Ausweg ist nie mehr Detail. Ein einfacher Rumpf mit richtig stehender Takelage vor
+einer Regenbank sieht ernst aus; ein detailreicher Rumpf mit falschen Verhältnissen
+bleibt Spielzeug.
+
+**Die eine erlaubte Textur, und warum die Zeile umgeschrieben wurde.** Hier stand zuerst
+„keine Texturen". Das erste Schiff mit eigenem Rumpf hat gezeigt, wo die Grenze wirklich
+liegt: Von der Seite trug der Umriss, aber **in der Aufsicht war das Deck eine braune
+Fläche ohne Maßstab** — und die Aufsicht ist genau der Blick, den man im Hafen und beim
+Entern hat. Es fehlte nicht Material, es fehlte die Fuge zwischen zwei Planken.
+
+Der Unterschied ist deshalb nicht „mit oder ohne Textur", sondern **wer die Farbe
+bestimmt**:
+
+- Verboten bleibt jede Karte, die *Farbe* mitbringt (Albedo-Fotos, Normal Maps,
+  Rost- und Schmutzkarten). Sie hebelt [A3](#a3-eine-palette-eine-quelle) aus, denn
+  danach steht die Farbe des Schiffs nicht mehr in `palette.gd`.
+- Erlaubt ist eine **in `ShipTextures` gerechnete Graustufenmaske**: Sie nimmt an der
+  Fuge Helligkeit weg und lässt alles andere unberührt. Die Farbe kommt weiter aus den
+  Vertexfarben, also aus der Palette. Umfärben, Nachtbeleuchtung und Zustandsfarben
+  funktionieren unverändert.
+
+Zwei Bedingungen gehören dazu, beide aus dem Bau der Karavelle: Die Maske wird
+**gerechnet, nicht gemalt** (im Projekt liegt keine einzige Bilddatei, und eine erste
+wäre eine, die jemand pflegen müsste), und die **UV-Koordinaten sind Meter**. Ohne das
+zweite ist die Planke am Bug schmaler als mittschiffs, weil der Spant dort kleiner ist —
+und sie hat auf einem Deck eine andere Breite als auf der Bordwand daneben.
+
+**Nicht angefasst wird die Benutzeroberfläche.** Das geschnitzte Holz mit Messingbeschlag
+ist das Alterhafteste an *Pirates!* 2004. Die kargen Bildschirme dieses Spiels sind heute
+schon moderner als alles, was dort abzuschauen wäre — siehe
+[A7](#a7-das-hud-trägt-keine-kästen).
 
 ---
 
@@ -419,6 +495,26 @@ Rauchtest sucht dafür den billigsten und den teuersten Hafen für eine Ware, ka
 verkauft hier und prüft, dass die Fahrt Gewinn abwirft — und dass dieselbe Fahrt
 rückwärts Verlust macht. Ohne den zweiten Teil wäre auch eine Wirtschaft bestanden, in
 der jede Richtung gleich viel bringt.
+
+### C7. Ein Körper wird von innen geprüft, nicht von außen gezählt
+
+Am Achterdeck der Karavelle fehlte die Heckwand. Von achtern sah man über die Reling
+hinweg in den Rumpf hinein; aus der Verfolgerkamera fiel es nie auf, aus der
+Heckaufnahme sofort. Ein zweites Loch saß am Bug, wo der vorderste Spant vierzehn
+Zentimeter breit ist und kein Steven ihn schloss.
+
+Die naheliegende Prüfung wäre gewesen, die erwarteten Flächen zu zählen — „hat das
+Halbdeck vier Wände?". Die taugt nichts: Sie hält genau den einen Fehler fest, den man
+gerade gefunden hat, und sagt nichts über den nächsten.
+
+Geprüft wird stattdessen die Eigenschaft, um die es geht: **Von einem Punkt im Inneren
+muss in jeder der sechs Achsenrichtungen etwas im Weg sein.** Ein Strahl je Richtung
+gegen alle Dreiecke des Rumpfes, `Geometry3D.ray_intersects_triangle`. Wer irgendeine
+Wand vergisst, fällt durch — egal welche, egal an welchem Modell.
+
+Nicht geprüft wird dabei die Wicklung der Flächen; der Test ist beidseitig. Dafür ist
+`HullMesh.face()` zuständig, die jede Fläche gegen eine mitgegebene Außenrichtung misst
+und notfalls zwei Ecken tauscht. Zwei Fragen, zwei Stellen.
 
 ---
 

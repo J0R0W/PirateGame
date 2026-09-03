@@ -21,12 +21,15 @@ und Kommentare erklären, *warum* etwas so gebaut ist.
 
 Vor größeren Änderungen lesen — sie sind die Quelle, nicht diese Datei:
 
-- **`docs/RICHTLINIEN.md`** — verbindliche Regeln für Gestaltung (A1–A10), Code (B1–B15) und
-  Tests (C1–C6). Jede Regel steht dort mit dem konkreten Fehler, aus dem sie entstanden ist.
+- **`docs/RICHTLINIEN.md`** — verbindliche Regeln für Gestaltung (A1–A11), Code (B1–B15) und
+  Tests (C1–C7). Jede Regel steht dort mit dem konkreten Fehler, aus dem sie entstanden ist.
 - **`docs/KONZEPT.md`** — Vision, Systeme, Roadmap (M0–M7), Abschnitt 10 „Stand" und
   Abschnitt 11 „Nächste Schritte". Wird mit jedem Meilenstein fortgeschrieben.
 - **`docs/STORY.md`** — Story-Konzept: Prämisse, Herkunft, Akte, Pfade, Mehrspieler-Ausblick.
   Optionaler Erzählstrang über der Sandbox aus `KONZEPT.md` 1, kein Ersatz dafür.
+- **`docs/SCHIFFE.md`** — wie eine neue Schiffsklasse entsteht: Recherche, Maßstab, `.tres`,
+  Spantenriss, Rigg, Beschläge, Prüfung. Abschnitt 13 ist die Liste der Fallen, alle einmal
+  passiert; Abschnitt 14 die Vorschläge, was der Werkbank als Nächstes fehlt.
 
 Neue Regeln entstehen aus Fehlern, nicht aus Vermutungen. Wer eine Regel hinzufügt, schreibt
 den Fehler dazu.
@@ -54,9 +57,9 @@ Genau so ist der Kompass einmal unbemerkt verschwunden.
 ### Sichtprüfungen — brauchen ein echtes Fenster
 
 ```bash
-godot --path . res://tests/capture_sailing.tscn   # Segelmodus, 6 Aufnahmen + Bildrate/Chunk-Zahl
+godot --path . res://tests/capture_sailing.tscn   # Segelmodus, 9 Aufnahmen (auch Abend, Nacht, Regen) + Bildrate
 godot --path . res://tests/capture_battle.tscn    # Seegefecht: Sichtung, längsseits, Salve, Einschlag, Prise, Jäger
-godot --path . res://tests/capture_ship.tscn      # Schiffsmodell aus vier Winkeln
+godot --path . res://tests/capture_ship.tscn      # Schiffsmodell aus vier Winkeln, dazu bei Nacht
 godot --path . res://tests/capture_island.tscn    # Küste: normal, ohne Dunst, ohne Wasser, Drahtgitter
 godot --path . res://tests/capture_town.tscn      # Siedlung aus drei Abständen
 godot --path . res://tests/capture_port.tscn      # Hafen: Markt, Kauf, Werft, Palast, Auftrag, Schenke
@@ -75,7 +78,15 @@ godot --headless --path . res://tests/world_report.tscn     # 5 Welten: Landante
 godot --headless --path . res://tests/terrain_report.tscn   # Kennzahlen eines Küstenchunks
 godot --headless --path . res://tests/duel.tscn             # 15 Gefechte KI gegen KI: Salven, Treffer, Schaden
 godot --path . res://tests/duel.tscn                        # dieselbe Szene mit Fenster: Gefecht zum Spielen
+godot --path . res://tests/rig.tscn                         # Takelage fahren: Wind drehen, Rah und Flagge beobachten
 ```
+
+`tests/rig.tscn` braucht ein Fenster und beantwortet genau eine Frage: Stehen Rah, Segel und
+Flagge richtig zum Wind? Der Wind ist dort festgenagelt und wird mit den Pfeiltasten gedreht
+(G wechselt die Schiffsklasse, N die Flagge, L lässt den Wind wieder laufen). Die Szene ist
+der Segelmodus selbst, nur ohne Begegnungen — eine eigene Bühne hätte genau die Fehler
+versteckt, die man dort sucht. Die Zahlen links im Bild sind der Messwert:
+**Rahstellung in Grad.**
 
 Parameter der Weltgenerierung werden hierüber eingestellt, nicht durch Probieren (Regel C4).
 Für das Gefecht gilt dasselbe: `tests/duel.tscn` ist beides — der Messlauf für Ballistik,
@@ -131,6 +142,9 @@ Rauchtest ohne Fenster läuft:
 | `Tavern` | Handgeld und Gerede: was ein Mann kostet, was man sich erzählt |
 | `OceanWaves` | Wellenfeld — **doppelt vorhanden**, siehe unten |
 | `TerrainChunk` | Chunk-Meshbau und die gezeichnete Oberflächenhöhe |
+| `HullMesh` | Rumpfbau aus einem Spantenriss — Außenhaut, Deck, Steven, Spiegel |
+| `Skylight` | Der Himmel: Sonnenstand, Mond, Dunst und **Sicht** aus Uhrzeit und Wetter |
+| `ShipTextures` | Die gerechneten Graustufenmasken für Planken und Segeltuch |
 | `Palette` | Alle Farben des Spiels |
 
 ### Winkelkonvention — die häufigste Fehlerquelle
@@ -417,6 +431,58 @@ Wind (`WorldData.wind_locked` hält ihn fest), Fahrt (`Ship.speed_multiplier`, l
 einzige Ansicht ist die sechste Aufnahme von `capture_sailing.tscn`. Vor einem Release fällt
 der Knoten aus der Szene.
 
+### Der Rumpf ist ein Spantenriss, keine Szene
+
+Die Karavelle (`entities/ship/models/`) ist das erste Schiff mit eigenem Modell und der
+Bauplan für alle weiteren. Wer die Form ändert, ändert die Zahlentabelle `STATIONS` —
+neun Querschnitte, dazwischen strakt `HullMesh`.
+
+**Zwei Flächen, zwei Materialien.** Außenhaut und Deck kommen als getrennte Surfaces
+heraus, weil die Planken verschieden laufen: längs des Rumpfes um den Spant herum, quer
+über das Deck von Bord zu Bord. Deshalb setzt niemand ein `material_override` auf ein
+Mesh aus `HullMesh` — es übermalte beide mit demselben.
+
+**Texturen sind Graustufenmasken und werden gerechnet** (Regel A11): `ShipTextures`
+zeichnet Plankenfuge und Segelnaht als Helligkeit, die Farbe kommt weiter aus der
+Palette. **UV-Koordinaten sind Meter** — eine Kachel ist ein Meter, damit dieselbe
+Textur auf Rumpf, Deck und Tuch dieselbe Plankenbreite ergibt.
+
+**Ein Rumpf wird von innen geprüft** (Regel C7): Der Rauchtest schießt aus drei Punkten
+im Inneren je sechs Strahlen und verlangt, dass überall etwas im Weg steht. So kam die
+fehlende Heckwand der Kajüte heraus, und so käme die nächste heraus.
+
+### Ein Schiff ist eine Tabelle, kein Programm
+
+`ShipModel` (`entities/ship/models/ship_model.gd`) ist die Werkbank aller Modelle: Straken,
+Masten mit Wanten und Stagen, Lateinersegel, Anker, Spill, Luke, Drehbassen, Laterne,
+Taue, Materialien. Ein Modell erbt davon und beschreibt sich in Tabellen — `stations()`,
+`masts()`, und in `_assemble()` die Beschläge mit ihren Positionen. Was ein Anker ist,
+weiß die Werkbank; **ein neuer Beschlag kommt dorthin, nie ins Modell**, sonst kopiert ihn
+das zweite Schiff.
+
+Drei Fragen beantwortet ein Modell dem Rauchtest selbst, damit derselbe Test über jedes
+künftige Schiff läuft: `hull_parts()` und `interior_probes()` (Regel C7, Dichtheit von
+innen) und `gun_count()` — was das Modell aufstellt, muss `cannon_slots` treffen.
+
+Ein Aufbau überschreibt genau `_rail_point()` und `_mast_foot()` (achtern gilt die Reling
+des Achterdecks) und ruft sonst `super()`.
+
+### Der Himmel wandert, und die Laterne weiß es
+
+Bis hierher stand die Sonne fest und `WorldData.weather` las niemand. `Skylight` rechnet
+aus `GameState.time_of_day()` und Wetter alles, was der Segelmodus je Bild in Sonne und
+Umgebung schreibt (`_update_skylight`): Sonne auf im Osten um sechs, unter im Westen um
+achtzehn, nachts ein Mond gegenüber, Dunst dunkel statt dicht. **Ein Spieltag dauert vier
+Minuten**, die Nacht ist deshalb mondhell und nicht schwarz. Eine Kampagne beginnt um
+acht Uhr (`GameState.START_MINUTES`) — mit dem alten Startwert null begänne sie im Dunkeln.
+
+`WorldData.visibility()` (0 bis 1) ist die daraus gewonnene Zahl, die alles liest, was auf
+Sicht reagiert. Heute ist das die **Laterne** (`Lantern`, dritter Knotentyp neben `Rig` und
+`Flag`): `Ship._update_lanterns()` zündet unter 0,45 an und löscht erst über 0,6 — zwei
+Schwellen, sonst flackert es in der Dämmerung. Sturm und Regen liegen darunter, also
+brennt sie auch mittags. Das Wetter setzt bislang nur das Debug-Menü (Abschnitt
+**Himmel**: Uhrzeit, Uhr anhalten, Wetter); eine Wetteruhr ist KONZEPT 5.6.
+
 ### Farben
 
 Alle Farben stehen in `data/palette.gd`. Im übrigen Code steht **kein** `Color(...)`, in
@@ -438,7 +504,8 @@ gedreht wird, bekommen `@export`.
 `modes/`:
 
 - kein `Color(...)` außerhalb von `palette.gd`, kein `theme_override_colors/` in `.tscn`
-- kein `rotation.y` außerhalb von `ship.gd` (außer mit `# kein Kurs`)
+- kein `rotation.y` außerhalb von `ship.gd` (außer mit `# kein Kurs`) — die Sonne wird
+  deshalb über `Basis.looking_at()` gestellt
 - Geländematerial rendert beidseitig und nutzt Vertex-Farben
 - die Aufsetzhöhe trifft das gezeichnete Mesh auf den Millimeter
 

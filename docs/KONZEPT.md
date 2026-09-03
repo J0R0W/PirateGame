@@ -1324,6 +1324,29 @@ Offen aus M4, bewusst zurückgestellt:
   werden. Wer die Luvposition hält, kann jede Beute stellen. Das ist ein System zum
   Durchschauen und vorerst kein Fehler.
 
+### Stand nach der Karavelle: Werkbank, Himmel, Laterne
+
+Drei Dinge aus dem Modellbau, die über das eine Schiff hinausgehen (Einzelheiten in
+`docs/SCHIFFE.md`):
+
+- **`ShipModel` ist die Werkbank.** Die Karavelle war ein 870-Zeilen-Programm, das zweite
+  Schiff hätte Anker, Spill, Masten und Taue kopiert. Jetzt beschreibt sich ein Modell in
+  Tabellen und erbt den Rest. Der Rauchtest fragt das Modell nach seinen Innenräumen und
+  seiner Rohrzahl, statt sie selbst zu kennen.
+- **Die Sonne wandert** (`Skylight`, `SailingMode._update_skylight`). Damit ist der
+  `TODO(M7)` im Segelmodus eingelöst und A11 „nicht immer Mittag" zur Hälfte: Licht und
+  Dunst folgen Uhrzeit und Wetter, der Himmel selbst färbt sich noch nicht. Ein Spieltag
+  dauert vier Minuten, die Nacht ist mondhell. **Eine Kampagne beginnt um acht Uhr** — der
+  Startwert null hätte sie um Mitternacht anfangen lassen.
+- **Schiffe machen bei schlechter Sicht Licht** (`Lantern`, `WorldData.visibility()`). Der
+  erste Beschlag, der etwas tut, und die erste Stelle, an der `WorldData.weather` gelesen
+  wird. Gesetzt wird das Wetter bislang nur im Debug-Menü — 5.6 bleibt offen, aber alles,
+  was auf Sicht reagiert, ist schon verdrahtet.
+
+Nächste Schritte daraus, in Reihenfolge: Rahsegel und Batteriedeck an der Werkbank (ohne
+sie bleibt jede weitere Klasse beim Platzhalterrumpf), dann ein Weg, auf dem eine neue
+Klasse überhaupt auf See kommt.
+
 ### Vorgemerkt: Überarbeitung der Meeresoptik
 
 Licht, Schatten und Wellen wiederholen sich sichtbar wie ein Schachbrett. Das ist kein

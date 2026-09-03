@@ -1,0 +1,27 @@
+[gd_resource type="Resource" script_class="ShipClass" load_steps=3 format=3]
+
+[ext_resource type="Script" path="res://data/ship_class.gd" id="1_ship_class"]
+[ext_resource type="PackedScene" path="res://entities/ship/models/caravel.tscn" id="2_model"]
+
+[resource]
+script = ExtResource("1_ship_class")
+id = &"caravel"
+display_name = "Karavelle"
+description = "Der Entdeckerbau, und längst aus der Mode. Kravel geplankt, flach gehend, drei Lateinerrahen — damit liegt sie höher am Wind als alles, was ihr nachsetzt. Vier Drehbassen auf der Reling sind ihre ganze Wehr: Sie ist zum Wegkommen gebaut, nicht zum Bleiben."
+model = ExtResource("2_model")
+max_hull = 115
+max_sails = 125
+base_speed = 11.0
+turn_rate_deg = 26.0
+speed_inertia = 5.0
+turn_inertia = 1.6
+cannon_slots = 4
+gun_traverse = 26.0
+cargo_capacity = 55
+min_crew = 10
+max_crew = 34
+base_price = 2100
+warship = false
+hull_scale = 1.0
+half_length = 4.8
+half_beam = 1.42
